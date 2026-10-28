@@ -106,3 +106,9 @@ export const subscriptionsApi = {
 export const statsApi = {
   getDashboard: () => api.get<DashboardStats>('/admin/stats'),
 };
+
+// Image upload (Cloudinary-backed, replaces storing base64 in MongoDB)
+export const imagesApi = {
+  upload: (image: string, folder: 'covers' | 'thumbnails' | 'pages' | 'articles') =>
+    api.post<{ url: string }>('/admin/upload', { image, folder }),
+};

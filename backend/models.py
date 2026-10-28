@@ -140,6 +140,10 @@ class GenreCreate(BaseModel):
 class CoverImageUpdate(BaseModel):
     cover_image: str
 
+class ImageUploadRequest(BaseModel):
+    image: str  # base64 data URL, or an already-hosted http(s) URL (no-op)
+    folder: str  # one of: covers, thumbnails, pages, articles
+
 class EpisodePagesUpdate(BaseModel):
     pages: List[str]
 

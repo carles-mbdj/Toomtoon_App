@@ -10,6 +10,7 @@ import os
 import secrets
 from pathlib import Path
 
+import cloudinary
 from dotenv import load_dotenv
 from fastapi.security import HTTPBearer
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -48,6 +49,18 @@ STRIPE_WEBHOOK_SECRET = os.environ.get('STRIPE_WEBHOOK_SECRET', '')
 
 # Initialize Stripe
 stripe.api_key = STRIPE_SECRET_KEY
+
+# Cloudinary (image storage) - optional: unset in dev/CI, where the
+# upload endpoint simply responds 503 instead of crashing on startup.
+CLOUDINARY_CLOUD_NAME = os.environ.get('CLOUDINARY_CLOUD_NAME', '')
+CLOUDINARY_API_KEY = os.environ.get('CLOUDINARY_API_KEY', '')
+CLOUDINARY_API_SECRET = os.environ.get('CLOUDINARY_API_SECRET', '')
+cloudinary.config(
+    cloud_name=CLOUDINARY_CLOUD_NAME,
+    api_key=CLOUDINARY_API_KEY,
+    api_secret=CLOUDINARY_API_SECRET,
+    secure=True,
+)
 
 security = HTTPBearer(auto_error=False)
 

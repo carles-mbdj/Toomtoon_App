@@ -98,6 +98,7 @@ export const ArticleForm: React.FC = () => {
                 value={form.cover_image ?? ''}
                 onChange={(cover_image) => setForm({ ...form, cover_image })}
                 aspectRatio="16/9"
+                folder="articles"
               />
             </div>
 

@@ -109,6 +109,7 @@ export const WebtoonForm: React.FC = () => {
                 label="Couverture"
                 value={form.cover_image ?? ''}
                 onChange={(cover_image) => setForm({ ...form, cover_image })}
+                folder="covers"
               />
             </div>
 

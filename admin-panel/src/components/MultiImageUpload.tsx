@@ -1,5 +1,6 @@
-import React, { useRef } from 'react';
-import { X, Plus } from 'lucide-react';
+import React, { useRef, useState } from 'react';
+import { X, Plus, Loader2 } from 'lucide-react';
+import { imagesApi } from '../api/services';
 
 interface MultiImageUploadProps {
   value: string[];
@@ -7,30 +8,38 @@ interface MultiImageUploadProps {
   label?: string;
 }
 
-export const MultiImageUpload: React.FC<MultiImageUploadProps> = ({ 
-  value = [], 
-  onChange, 
+export const MultiImageUpload: React.FC<MultiImageUploadProps> = ({
+  value = [],
+  onChange,
   label = 'Pages'
 }) => {
   const inputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleFilesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const readAsDataUrl = (file: File) =>
+    new Promise<string>((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.readAsDataURL(file);
+    });
+
+  const handleFilesChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
+    if (inputRef.current) inputRef.current.value = '';
     if (!files.length) return;
 
-    const promises = files.map((file) => {
-      return new Promise<string>((resolve) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.readAsDataURL(file);
-      });
-    });
-
-    Promise.all(promises).then((newImages) => {
-      onChange([...value, ...newImages]);
-    });
-
-    if (inputRef.current) inputRef.current.value = '';
+    setError(null);
+    setUploading(true);
+    try {
+      const dataUrls = await Promise.all(files.map(readAsDataUrl));
+      const urls = await Promise.all(dataUrls.map((dataUrl) => imagesApi.upload(dataUrl, 'pages').then((res) => res.data.url)));
+      onChange([...value, ...urls]);
+    } catch {
+      setError("Échec de l'envoi d'une ou plusieurs pages");
+    } finally {
+      setUploading(false);
+    }
   };
 
   const handleRemove = (index: number) => {
@@ -51,7 +60,7 @@ export const MultiImageUpload: React.FC<MultiImageUploadProps> = ({
       <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
         {label} ({value.length} pages)
       </label>
-      
+
       <input
         ref={inputRef}
         type="file"
@@ -103,12 +112,21 @@ export const MultiImageUpload: React.FC<MultiImageUploadProps> = ({
         <button
           type="button"
           onClick={() => inputRef.current?.click()}
-          className="w-full aspect-[3/4] border-2 border-dashed border-[var(--border)] rounded-xl flex flex-col items-center justify-center gap-2 hover:border-[var(--primary)] hover:bg-[var(--surface-light)] transition-all cursor-pointer"
+          disabled={uploading}
+          className="w-full aspect-[3/4] border-2 border-dashed border-[var(--border)] rounded-xl flex flex-col items-center justify-center gap-2 hover:border-[var(--primary)] hover:bg-[var(--surface-light)] transition-all cursor-pointer disabled:opacity-50"
         >
-          <Plus size={32} className="text-[var(--text-muted)]" />
-          <span className="text-sm text-[var(--text-muted)]">Ajouter</span>
+          {uploading ? (
+            <Loader2 size={32} className="text-[var(--text-muted)] animate-spin" />
+          ) : (
+            <Plus size={32} className="text-[var(--text-muted)]" />
+          )}
+          <span className="text-sm text-[var(--text-muted)]">
+            {uploading ? 'Envoi...' : 'Ajouter'}
+          </span>
         </button>
       </div>
+
+      {error && <p className="text-sm text-[var(--error)] mt-2">{error}</p>}
     </div>
   );
 };

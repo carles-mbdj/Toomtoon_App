@@ -6,11 +6,27 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 import config
+import image_storage
 from auth_utils import hash_password, issue_tokens, require_admin, verify_and_migrate_password
-from models import Article, Episode, User, UserLogin, Webtoon
+from models import Article, Episode, ImageUploadRequest, User, UserLogin, Webtoon
 from routers.payments import get_plan_by_id
 
 router = APIRouter()
+
+
+# ==================== IMAGE UPLOAD ====================
+
+@router.post("/admin/upload")
+async def upload_image(body: ImageUploadRequest, admin: User = Depends(require_admin)):
+    """Upload an image (base64 data URL) to Cloudinary and return its URL.
+    Used by the admin panel instead of storing base64 blobs in MongoDB."""
+    try:
+        url = await image_storage.upload_image(body.image, body.folder)
+    except image_storage.ImageStorageNotConfigured:
+        raise HTTPException(status_code=503, detail="Le stockage d'images n'est pas configuré")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"url": url}
 
 
 # ==================== ADMIN AUTH ====================
