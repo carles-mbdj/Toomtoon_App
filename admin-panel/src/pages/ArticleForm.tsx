@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Save } from 'lucide-react';
-import { articlesApi } from '../api/services';
+import type { ArticleInput } from '../types';
+import { getErrorMessage } from '../utils/errors';
 import { ImageUpload } from '../components/ImageUpload';
 import { RichTextEditor } from '../components/RichTextEditor';
+import { useArticle, useCreateArticle, useUpdateArticle } from '../hooks/queries';
 import toast from 'react-hot-toast';
 
 const CATEGORIES = [
@@ -18,33 +20,31 @@ export const ArticleForm: React.FC = () => {
   const navigate = useNavigate();
   const isEditing = !!id && id !== 'new';
 
-  const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<ArticleInput>({
     title: '',
-    excerpt: '',
+    subtitle: '',
     content: '',
     category: 'news',
     cover_image: '',
-    is_featured: false,
+    featured: false,
   });
 
-  useEffect(() => {
-    if (isEditing) fetchArticle();
-  }, [id]);
+  const articleQuery = useArticle(isEditing ? id : undefined);
+  const loading = isEditing && articleQuery.isLoading;
+  const createArticle = useCreateArticle();
+  const updateArticle = useUpdateArticle();
+  const saving = createArticle.isPending || updateArticle.isPending;
 
-  const fetchArticle = async () => {
-    setLoading(true);
-    try {
-      const response = await articlesApi.getById(id!);
-      setForm(response.data);
-    } catch (error) {
+  useEffect(() => {
+    if (articleQuery.data) setForm(articleQuery.data);
+  }, [articleQuery.data]);
+
+  useEffect(() => {
+    if (articleQuery.isError) {
       toast.error('Article non trouvé');
       navigate('/articles');
-    } finally {
-      setLoading(false);
     }
-  };
+  }, [articleQuery.isError]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,20 +53,17 @@ export const ArticleForm: React.FC = () => {
       return;
     }
 
-    setSaving(true);
     try {
       if (isEditing) {
-        await articlesApi.update(id!, form);
+        await updateArticle.mutateAsync({ id: id!, data: form });
         toast.success('Article mis à jour');
       } else {
-        await articlesApi.create(form);
+        await createArticle.mutateAsync(form);
         toast.success('Article créé');
       }
       navigate('/articles');
-    } catch (error: any) {
-      toast.error(error.response?.data?.detail || 'Erreur lors de la sauvegarde');
-    } finally {
-      setSaving(false);
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Erreur lors de la sauvegarde'));
     }
   };
 
@@ -98,7 +95,7 @@ export const ArticleForm: React.FC = () => {
             <div className="md:col-span-1">
               <ImageUpload
                 label="Image mise en avant"
-                value={form.cover_image}
+                value={form.cover_image ?? ''}
                 onChange={(cover_image) => setForm({ ...form, cover_image })}
                 aspectRatio="16/9"
               />
@@ -126,7 +123,7 @@ export const ArticleForm: React.FC = () => {
                   </label>
                   <select
                     value={form.category}
-                    onChange={(e) => setForm({ ...form, category: e.target.value })}
+                    onChange={(e) => setForm({ ...form, category: e.target.value as ArticleInput['category'] })}
                     className="w-full px-4 py-3 bg-[var(--surface-light)] border border-[var(--border)] rounded-xl text-[var(--text)] focus:outline-none focus:border-[var(--primary)]"
                   >
                     {CATEGORIES.map((cat) => (
@@ -138,8 +135,8 @@ export const ArticleForm: React.FC = () => {
                   <label className="flex items-center gap-3 cursor-pointer py-3">
                     <input
                       type="checkbox"
-                      checked={form.is_featured}
-                      onChange={(e) => setForm({ ...form, is_featured: e.target.checked })}
+                      checked={form.featured}
+                      onChange={(e) => setForm({ ...form, featured: e.target.checked })}
                       className="w-5 h-5 rounded border-[var(--border)] bg-[var(--surface-light)] checked:bg-[var(--primary)]"
                     />
                     <span className="text-[var(--text)]">À la une</span>
@@ -154,8 +151,8 @@ export const ArticleForm: React.FC = () => {
               Résumé (optionnel)
             </label>
             <textarea
-              value={form.excerpt}
-              onChange={(e) => setForm({ ...form, excerpt: e.target.value })}
+              value={form.subtitle ?? ''}
+              onChange={(e) => setForm({ ...form, subtitle: e.target.value })}
               rows={2}
               placeholder="Court résumé de l'article"
               className="w-full px-4 py-3 bg-[var(--surface-light)] border border-[var(--border)] rounded-xl text-[var(--text)] focus:outline-none focus:border-[var(--primary)] resize-none"

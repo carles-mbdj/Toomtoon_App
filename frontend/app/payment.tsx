@@ -6,8 +6,6 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Modal,
-  Pressable,
   Linking,
   Platform,
 } from 'react-native';
@@ -15,39 +13,27 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../src/constants/colors';
 import { Header } from '../src/components/Header';
+import { InfoModal } from '../src/components/InfoModal';
+import { CurrencySelector } from '../src/components/payment/CurrencySelector';
+import { PlanCard } from '../src/components/payment/PlanCard';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { checkoutApi, subscriptionApi } from '../src/services/api';
+import { checkoutApi } from '../src/services/api';
 import { useAuthStore } from '../src/store/authStore';
+import { getErrorMessage } from '../src/utils/errors';
+import { formatPrice } from '../src/utils/currency';
+import { useSubscriptionPlans } from '../src/hooks/queries';
 import Constants from 'expo-constants';
-
-// Currency formatting
-const formatPrice = (amount: number, currency: string): string => {
-  if (currency === 'XAF') {
-    return `${amount.toLocaleString('fr-FR')} XAF`;
-  }
-  return `${(amount / 100).toFixed(2)} ${currency}`;
-};
-
-// Currency symbols
-const CURRENCY_OPTIONS = [
-  { code: 'EUR', symbol: '€', name: 'Euro' },
-  { code: 'USD', symbol: '$', name: 'US Dollar' },
-  { code: 'XAF', symbol: 'FCFA', name: 'Franc CFA' },
-];
 
 export default function PaymentScreen() {
   const { planId } = useLocalSearchParams<{ planId: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { isAuthenticated, user, refreshUser, isLoading: authLoading, checkAuth } = useAuthStore();
+  const { isAuthenticated, isLoading: authLoading, checkAuth } = useAuthStore();
 
-  const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
-  const [plan, setPlan] = useState<any>(null);
-  const [plans, setPlans] = useState<any[]>([]);
   const [selectedPlanId, setSelectedPlanId] = useState(planId || '');
   const [currency, setCurrency] = useState('EUR');
-  
+
   // Modal states
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showErrorModal, setShowErrorModal] = useState(false);
@@ -63,47 +49,36 @@ export default function PaymentScreen() {
     verifyAuth();
   }, []);
 
-  // Handle auth state
+  // Show the login modal once we know the user isn't authenticated;
+  // plan fetching below is itself gated on being authenticated.
   useEffect(() => {
     if (!authChecked || authLoading) return;
-    
-    if (!isAuthenticated) {
-      setShowLoginModal(true);
-    } else {
-      setShowLoginModal(false);
-      fetchData();
-    }
+    setShowLoginModal(!isAuthenticated);
   }, [authChecked, authLoading, isAuthenticated]);
 
-  useEffect(() => {
-    if (plans.length > 0 && selectedPlanId) {
-      const found = plans.find(p => p.id === selectedPlanId);
-      setPlan(found);
-    }
-  }, [selectedPlanId, plans]);
+  const plansQuery = useSubscriptionPlans({ enabled: authChecked && !authLoading && isAuthenticated });
+  const plansData = plansQuery.data;
+  const plans = plansData ?? [];
+  const loading = !authChecked || authLoading || (isAuthenticated && plansQuery.isLoading);
 
-  const fetchData = async () => {
-    try {
-      const plansRes = await subscriptionApi.getPlans();
-      setPlans(plansRes.data);
-      
-      if (planId) {
-        setSelectedPlanId(planId);
-        const found = plansRes.data.find((p: any) => p.id === planId);
-        setPlan(found);
-      } else if (plansRes.data.length > 0) {
-        const popularPlan = plansRes.data.find((p: any) => p.popular) || plansRes.data[0];
-        setSelectedPlanId(popularPlan.id);
-        setPlan(popularPlan);
-      }
-    } catch (error) {
-      console.error('Error fetching payment data:', error);
+  useEffect(() => {
+    if (plansQuery.isError) {
       setErrorMessage('Impossible de charger les options de paiement');
       setShowErrorModal(true);
-    } finally {
-      setLoading(false);
     }
-  };
+  }, [plansQuery.isError]);
+
+  // Default the selection to the requested plan, or the popular one, once plans load
+  useEffect(() => {
+    if (!plansData || plansData.length === 0 || selectedPlanId) return;
+    if (planId && plansData.some((p) => p.id === planId)) {
+      setSelectedPlanId(planId);
+    } else {
+      setSelectedPlanId((plansData.find((p) => p.popular) || plansData[0]).id);
+    }
+  }, [plansData, planId, selectedPlanId]);
+
+  const plan = plans.find((p) => p.id === selectedPlanId) ?? null;
 
   // Handle payment - redirect to Stripe Checkout
   const handlePayment = async () => {
@@ -117,9 +92,9 @@ export default function PaymentScreen() {
 
     try {
       // Get base URL for success/cancel redirects
-      const baseUrl = Constants.expoConfig?.extra?.EXPO_PUBLIC_BACKEND_URL || 
+      const baseUrl = Constants.expoConfig?.extra?.EXPO_PUBLIC_BACKEND_URL ||
                       'https://african-webtoons.preview.emergentagent.com';
-      
+
       const successUrl = `${baseUrl}/payment-success`;
       const cancelUrl = `${baseUrl}/payment-cancel`;
 
@@ -130,9 +105,9 @@ export default function PaymentScreen() {
         successUrl,
         cancelUrl
       );
-      
-      const { checkout_url, session_id } = response.data;
-      
+
+      const { checkout_url } = response.data;
+
       // Open Stripe Checkout in browser
       if (Platform.OS === 'web') {
         window.location.href = checkout_url;
@@ -146,10 +121,10 @@ export default function PaymentScreen() {
           setShowErrorModal(true);
         }
       }
-      
-    } catch (error: any) {
+
+    } catch (error) {
       console.error('Payment error:', error);
-      setErrorMessage(error.response?.data?.detail || 'Une erreur est survenue lors du paiement');
+      setErrorMessage(getErrorMessage(error, 'Une erreur est survenue lors du paiement'));
       setShowErrorModal(true);
     } finally {
       setProcessing(false);
@@ -171,87 +146,24 @@ export default function PaymentScreen() {
   return (
     <View style={styles.container}>
       <Header showBack title="Choisir un abonnement" />
-      
-      <ScrollView 
+
+      <ScrollView
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
       >
-        {/* Currency Selection */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Devise</Text>
-          <View style={styles.currencyRow}>
-            {CURRENCY_OPTIONS.map((cur) => (
-              <TouchableOpacity
-                key={cur.code}
-                style={[
-                  styles.currencyButton,
-                  currency === cur.code && styles.currencyButtonActive,
-                ]}
-                onPress={() => setCurrency(cur.code)}
-              >
-                <Text style={[
-                  styles.currencyText,
-                  currency === cur.code && styles.currencyTextActive,
-                ]}>
-                  {cur.symbol}
-                </Text>
-                <Text style={[
-                  styles.currencyName,
-                  currency === cur.code && styles.currencyNameActive,
-                ]}>
-                  {cur.code}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
+        <CurrencySelector value={currency} onChange={setCurrency} />
 
-        {/* Plans */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Choisissez votre plan</Text>
-          
           {plans.map((p) => (
-            <TouchableOpacity
+            <PlanCard
               key={p.id}
-              style={[
-                styles.planCard,
-                selectedPlanId === p.id && styles.planCardSelected,
-                p.popular && styles.planCardPopular,
-              ]}
-              onPress={() => {
-                setSelectedPlanId(p.id);
-                setPlan(p);
-              }}
-            >
-              {p.popular && (
-                <View style={styles.popularBadge}>
-                  <Text style={styles.popularText}>POPULAIRE</Text>
-                </View>
-              )}
-              
-              <View style={styles.planHeader}>
-                <View style={styles.radioOuter}>
-                  {selectedPlanId === p.id && <View style={styles.radioInner} />}
-                </View>
-                <View style={styles.planInfo}>
-                  <Text style={styles.planName}>{p.name}</Text>
-                  <Text style={styles.planDuration}>{p.duration_days} jours</Text>
-                </View>
-                <Text style={styles.planPrice}>
-                  {formatPrice(p.prices[currency], currency)}
-                </Text>
-              </View>
-              
-              <View style={styles.planFeatures}>
-                {p.features?.map((feature: string, idx: number) => (
-                  <View key={idx} style={styles.featureRow}>
-                    <Ionicons name="checkmark-circle" size={16} color={Colors.success} />
-                    <Text style={styles.featureText}>{feature}</Text>
-                  </View>
-                ))}
-              </View>
-            </TouchableOpacity>
+              plan={p}
+              currency={currency}
+              selected={selectedPlanId === p.id}
+              onSelect={() => setSelectedPlanId(p.id)}
+            />
           ))}
         </View>
 
@@ -290,7 +202,7 @@ export default function PaymentScreen() {
             {plan ? formatPrice(plan.prices[currency], currency) : '-'}
           </Text>
         </View>
-        
+
         <TouchableOpacity
           style={[styles.payButton, processing && styles.payButtonDisabled]}
           onPress={handlePayment}
@@ -308,68 +220,38 @@ export default function PaymentScreen() {
             </>
           )}
         </TouchableOpacity>
-        
+
         <Text style={styles.termsText}>
           En continuant, vous acceptez nos conditions générales d'utilisation
         </Text>
       </View>
 
-      {/* Login Modal */}
-      <Modal
+      <InfoModal
         visible={showLoginModal}
-        transparent
-        animationType="fade"
+        icon="person-circle"
+        iconColor={Colors.primary}
+        title="Connexion requise"
+        message="Connectez-vous pour souscrire à un abonnement"
+        secondaryLabel="Annuler"
+        onSecondaryPress={() => router.back()}
+        primaryLabel="Se connecter"
+        onPrimaryPress={() => {
+          setShowLoginModal(false);
+          router.push('/auth');
+        }}
         onRequestClose={() => router.back()}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Ionicons name="person-circle" size={48} color={Colors.primary} />
-            <Text style={styles.modalTitle}>Connexion requise</Text>
-            <Text style={styles.modalMessage}>
-              Connectez-vous pour souscrire à un abonnement
-            </Text>
-            <View style={styles.modalButtons}>
-              <Pressable
-                style={styles.modalButtonSecondary}
-                onPress={() => router.back()}
-              >
-                <Text style={styles.modalButtonSecondaryText}>Annuler</Text>
-              </Pressable>
-              <Pressable
-                style={styles.modalButtonPrimary}
-                onPress={() => {
-                  setShowLoginModal(false);
-                  router.push('/auth');
-                }}
-              >
-                <Text style={styles.modalButtonPrimaryText}>Se connecter</Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      />
 
-      {/* Error Modal */}
-      <Modal
+      <InfoModal
         visible={showErrorModal}
-        transparent
-        animationType="fade"
+        icon="alert-circle"
+        iconColor={Colors.error}
+        title="Erreur"
+        message={errorMessage}
+        primaryLabel="OK"
+        onPrimaryPress={() => setShowErrorModal(false)}
         onRequestClose={() => setShowErrorModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Ionicons name="alert-circle" size={64} color={Colors.error} />
-            <Text style={styles.modalTitle}>Erreur</Text>
-            <Text style={styles.modalMessage}>{errorMessage}</Text>
-            <Pressable
-              style={[styles.modalButtonPrimary, { width: '100%', marginTop: 20 }]}
-              onPress={() => setShowErrorModal(false)}
-            >
-              <Text style={styles.modalButtonPrimaryText}>OK</Text>
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
+      />
     </View>
   );
 }
@@ -400,123 +282,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     marginBottom: 16,
-  },
-  currencyRow: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  currencyButton: {
-    flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    backgroundColor: Colors.surface,
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: 'transparent',
-  },
-  currencyButtonActive: {
-    borderColor: Colors.primary,
-    backgroundColor: Colors.surfaceLight,
-  },
-  currencyText: {
-    color: Colors.textMuted,
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  currencyTextActive: {
-    color: Colors.primary,
-  },
-  currencyName: {
-    color: Colors.textMuted,
-    fontSize: 12,
-    marginTop: 2,
-  },
-  currencyNameActive: {
-    color: Colors.text,
-  },
-  planCard: {
-    backgroundColor: Colors.surface,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 2,
-    borderColor: 'transparent',
-  },
-  planCardSelected: {
-    borderColor: Colors.primary,
-    backgroundColor: Colors.surfaceLight,
-  },
-  planCardPopular: {
-    borderColor: Colors.warning,
-  },
-  popularBadge: {
-    position: 'absolute',
-    top: -10,
-    right: 16,
-    backgroundColor: Colors.warning,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  popularText: {
-    color: '#000',
-    fontSize: 10,
-    fontWeight: 'bold',
-  },
-  planHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  radioOuter: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 2,
-    borderColor: Colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  radioInner: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: Colors.primary,
-  },
-  planInfo: {
-    flex: 1,
-  },
-  planName: {
-    color: Colors.text,
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  planDuration: {
-    color: Colors.textMuted,
-    fontSize: 13,
-    marginTop: 2,
-  },
-  planPrice: {
-    color: Colors.primary,
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-  planFeatures: {
-    marginTop: 16,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
-  },
-  featureRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-    gap: 8,
-  },
-  featureText: {
-    color: Colors.textSecondary,
-    fontSize: 14,
   },
   stripeInfo: {
     backgroundColor: Colors.surface,
@@ -622,65 +387,5 @@ const styles = StyleSheet.create({
     fontSize: 12,
     textAlign: 'center',
     marginTop: 12,
-  },
-  // Modal styles
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  modalContent: {
-    backgroundColor: Colors.surface,
-    borderRadius: 20,
-    padding: 24,
-    width: '100%',
-    maxWidth: 340,
-    alignItems: 'center',
-  },
-  modalTitle: {
-    color: Colors.text,
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginTop: 16,
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  modalMessage: {
-    color: Colors.textSecondary,
-    fontSize: 15,
-    textAlign: 'center',
-    lineHeight: 22,
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 24,
-    width: '100%',
-  },
-  modalButtonSecondary: {
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: 12,
-    backgroundColor: Colors.surfaceLight,
-    alignItems: 'center',
-  },
-  modalButtonSecondaryText: {
-    color: Colors.textSecondary,
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  modalButtonPrimary: {
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: 12,
-    backgroundColor: Colors.primary,
-    alignItems: 'center',
-  },
-  modalButtonPrimaryText: {
-    color: Colors.white,
-    fontSize: 16,
-    fontWeight: '600',
   },
 });

@@ -14,47 +14,32 @@ import { Colors } from '../src/constants/colors';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebtoonCard } from '../src/components/WebtoonCard';
 import { LoadingSpinner } from '../src/components/LoadingSpinner';
-import { webtoonsApi } from '../src/services/api';
+import { useWebtoons } from '../src/hooks/queries';
 
 export default function SearchScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  
+
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [hasSearched, setHasSearched] = useState(false);
+  const [debouncedQuery, setDebouncedQuery] = useState('');
 
-  // Auto-search when query changes (with debounce)
+  // Debounce the search term before hitting the API
   useEffect(() => {
-    if (!query.trim()) {
-      setResults([]);
-      setHasSearched(false);
-      return;
-    }
-
     const timeoutId = setTimeout(() => {
-      handleSearch();
-    }, 500); // 500ms debounce
+      setDebouncedQuery(query.trim());
+    }, 500);
 
     return () => clearTimeout(timeoutId);
   }, [query]);
 
-  const handleSearch = async () => {
-    if (!query.trim()) return;
-    
+  const hasSearched = debouncedQuery.length > 0;
+  const searchQuery = useWebtoons({ search: debouncedQuery }, { enabled: hasSearched });
+  const results = hasSearched ? searchQuery.data ?? [] : [];
+  const loading = hasSearched && searchQuery.isLoading;
+
+  const handleSearch = () => {
     Keyboard.dismiss();
-    setLoading(true);
-    setHasSearched(true);
-    
-    try {
-      const response = await webtoonsApi.getAll({ search: query });
-      setResults(response.data);
-    } catch (error) {
-      console.log('Search error:', error);
-    } finally {
-      setLoading(false);
-    }
+    setDebouncedQuery(query.trim());
   };
 
   return (
@@ -79,8 +64,7 @@ export default function SearchScreen() {
           {query.length > 0 && (
             <TouchableOpacity onPress={() => {
               setQuery('');
-              setResults([]);
-              setHasSearched(false);
+              setDebouncedQuery('');
             }}>
               <Ionicons name="close-circle" size={20} color={Colors.textMuted} />
             </TouchableOpacity>

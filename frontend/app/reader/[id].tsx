@@ -7,20 +7,23 @@ import {
   TouchableOpacity,
   Dimensions,
   Alert,
-  Image,
   StatusBar,
   Animated,
   NativeSyntheticEvent,
   NativeScrollEvent,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../src/constants/colors';
 import { LoadingSpinner } from '../../src/components/LoadingSpinner';
-import { episodesApi } from '../../src/services/api';
+import { getErrorMessage } from '../../src/utils/errors';
+import { useEpisode } from '../../src/hooks/queries';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width, height } = Dimensions.get('window');
+
+type ReaderPage = { id: number; image: string } | { id: number; isDemo: true };
 
 export default function ReaderScreen() {
   const { id } = useLocalSearchParams();
@@ -28,18 +31,36 @@ export default function ReaderScreen() {
   const insets = useSafeAreaInsets();
   const scrollViewRef = useRef<ScrollView>(null);
   const controlsOpacity = useRef(new Animated.Value(1)).current;
-  
-  const [episode, setEpisode] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+
   const [currentPage, setCurrentPage] = useState(0);
   const [showControls, setShowControls] = useState(true);
   const [scrollProgress, setScrollProgress] = useState(0);
 
+  const episodeQuery = useEpisode(id as string);
+  const episode = episodeQuery.data ?? null;
+  const loading = episodeQuery.isLoading;
+
   useEffect(() => {
-    fetchEpisode();
     StatusBar.setHidden(true);
     return () => StatusBar.setHidden(false);
-  }, [id]);
+  }, []);
+
+  useEffect(() => {
+    if (episodeQuery.isError) {
+      const message = getErrorMessage(episodeQuery.error, "Impossible de charger l'épisode");
+      Alert.alert('Erreur', message, [
+        { text: 'Retour', onPress: () => router.back() }
+      ]);
+    }
+  }, [episodeQuery.isError]);
+
+  useEffect(() => {
+    // Warm the disk cache for every page up front so scrolling through the
+    // episode doesn't stall waiting on each image to download.
+    if (episode?.pages?.length) {
+      Image.prefetch(episode.pages, 'disk').catch(() => {});
+    }
+  }, [episode]);
 
   useEffect(() => {
     Animated.timing(controlsOpacity, {
@@ -48,20 +69,6 @@ export default function ReaderScreen() {
       useNativeDriver: true,
     }).start();
   }, [showControls]);
-
-  const fetchEpisode = async () => {
-    try {
-      const response = await episodesApi.getById(id as string);
-      setEpisode(response.data);
-    } catch (error: any) {
-      const message = error.response?.data?.detail || 'Impossible de charger l\'épisode';
-      Alert.alert('Erreur', message, [
-        { text: 'Retour', onPress: () => router.back() }
-      ]);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const toggleControls = () => {
     setShowControls(!showControls);
@@ -102,9 +109,9 @@ export default function ReaderScreen() {
   }
 
   // Use actual pages or generate demo pages
-  const pages = episode.pages && episode.pages.length > 0
-    ? episode.pages.map((img: string, i: number) => ({ id: i, image: img }))
-    : Array.from({ length: 10 }, (_, i) => ({ id: i, isDemo: true }));
+  const pages: ReaderPage[] = episode.pages && episode.pages.length > 0
+    ? episode.pages.map((img, i) => ({ id: i, image: img }))
+    : Array.from({ length: 10 }, (_, i) => ({ id: i, isDemo: true as const }));
 
   const totalPages = pages.length;
 
@@ -119,19 +126,21 @@ export default function ReaderScreen() {
         scrollEventThrottle={16}
         onTouchStart={toggleControls}
       >
-        {pages.map((page: any, index: number) => (
+        {pages.map((page, index) => (
           <View key={page.id} style={styles.page}>
-            {page.isDemo ? (
+            {'isDemo' in page ? (
               <View style={styles.demoPageContent}>
                 <Ionicons name="image" size={60} color={Colors.primary} />
                 <Text style={styles.pageText}>Page {index + 1}</Text>
                 <Text style={styles.pageHint}>Défilez verticalement ↓</Text>
               </View>
             ) : (
-              <Image 
-                source={{ uri: page.image }} 
+              <Image
+                source={{ uri: page.image }}
                 style={styles.pageImage}
-                resizeMode="contain"
+                contentFit="contain"
+                cachePolicy="disk"
+                priority={index < 3 ? 'high' : 'normal'}
               />
             )}
           </View>

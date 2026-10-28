@@ -10,6 +10,7 @@ import {
   X,
   Tag,
   CreditCard,
+  Receipt,
   Sun,
   Moon
 } from 'lucide-react';
@@ -27,6 +28,7 @@ const navItems = [
   { to: '/genres', icon: Tag, label: 'Genres' },
   { to: '/users', icon: Users, label: 'Utilisateurs' },
   { to: '/subscriptions', icon: CreditCard, label: 'Abonnements' },
+  { to: '/payments', icon: Receipt, label: 'Paiements' },
   { to: '/articles', icon: Newspaper, label: 'Toom-Mag' },
   { to: '/settings', icon: Settings, label: 'Paramètres' },
 ];

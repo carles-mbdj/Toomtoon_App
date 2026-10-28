@@ -1,21 +1,24 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Save, Star } from 'lucide-react';
-import { webtoonsApi, genresApi } from '../api/services';
+import type { WebtoonInput } from '../types';
+import { getErrorMessage } from '../utils/errors';
 import { ImageUpload } from '../components/ImageUpload';
+import { useCreateWebtoon, useGenres, useUpdateWebtoon, useWebtoon } from '../hooks/queries';
 import toast from 'react-hot-toast';
 
 const DAYS = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche'];
+const DEFAULT_GENRES = [
+  'Action', 'Romance', 'Fantastique', 'Comédie', 'Drame',
+  'Mystère', 'Science-Fiction', 'Horreur', 'Thriller', 'Aventure'
+];
 
 export const WebtoonForm: React.FC = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const isEditing = !!id && id !== 'new';
 
-  const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [genres, setGenres] = useState<string[]>([]);
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<WebtoonInput>({
     title: '',
     author: '',
     description: '',
@@ -27,58 +30,52 @@ export const WebtoonForm: React.FC = () => {
     is_featured: false,
   });
 
+  const genresQuery = useGenres();
+  const genreNames = genresQuery.data?.map((g) => g.name) ?? [];
+  const genres = genreNames.length > 0 ? genreNames : DEFAULT_GENRES;
+
+  const webtoonQuery = useWebtoon(isEditing ? id : undefined);
+  const loading = isEditing && webtoonQuery.isLoading;
+  const createWebtoon = useCreateWebtoon();
+  const updateWebtoon = useUpdateWebtoon();
+  const saving = createWebtoon.isPending || updateWebtoon.isPending;
+
   useEffect(() => {
-    fetchGenres();
-    if (isEditing) fetchWebtoon();
-  }, [id]);
+    const webtoon = webtoonQuery.data;
+    if (!webtoon) return;
+    setForm({
+      title: webtoon.title,
+      author: webtoon.author,
+      description: webtoon.description,
+      genre: webtoon.genre,
+      cover_image: webtoon.cover_image ?? '',
+      season: webtoon.season,
+      status: webtoon.status,
+      diffusion_day: webtoon.diffusion_day ?? 'lundi',
+      is_featured: webtoon.is_featured || false,
+    });
+  }, [webtoonQuery.data]);
 
-  const fetchGenres = async () => {
-    try {
-      const response = await genresApi.getAll();
-      const genreNames = response.data.map((g: any) => g.name);
-      setGenres(genreNames.length > 0 ? genreNames : getDefaultGenres());
-    } catch (error) {
-      setGenres(getDefaultGenres());
-    }
-  };
-
-  const getDefaultGenres = () => [
-    'Action', 'Romance', 'Fantastique', 'Comédie', 'Drame', 
-    'Mystère', 'Science-Fiction', 'Horreur', 'Thriller', 'Aventure'
-  ];
-
-  const fetchWebtoon = async () => {
-    setLoading(true);
-    try {
-      const response = await webtoonsApi.getById(id!);
-      setForm({
-        ...response.data,
-        is_featured: response.data.is_featured || false,
-      });
-    } catch (error) {
+  useEffect(() => {
+    if (webtoonQuery.isError) {
       toast.error('Webtoon non trouvé');
       navigate('/webtoons');
-    } finally {
-      setLoading(false);
     }
-  };
+  }, [webtoonQuery.isError]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSaving(true);
     try {
       if (isEditing) {
-        await webtoonsApi.update(id!, form);
+        await updateWebtoon.mutateAsync({ id: id!, data: form });
         toast.success('Webtoon mis à jour');
       } else {
-        await webtoonsApi.create(form);
+        await createWebtoon.mutateAsync(form);
         toast.success('Webtoon créé');
       }
       navigate('/webtoons');
-    } catch (error: any) {
-      toast.error(error.response?.data?.detail || 'Erreur lors de la sauvegarde');
-    } finally {
-      setSaving(false);
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Erreur lors de la sauvegarde'));
     }
   };
 
@@ -110,7 +107,7 @@ export const WebtoonForm: React.FC = () => {
             <div className="md:col-span-1">
               <ImageUpload
                 label="Couverture"
-                value={form.cover_image}
+                value={form.cover_image ?? ''}
                 onChange={(cover_image) => setForm({ ...form, cover_image })}
               />
             </div>

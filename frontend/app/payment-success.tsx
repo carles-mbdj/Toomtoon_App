@@ -45,7 +45,7 @@ export default function PaymentSuccessScreen() {
       } else {
         setError("Le paiement n'a pas été complété");
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error('Error verifying payment:', err);
       // Even if verification fails, the webhook will handle the subscription
       // So we can still show success

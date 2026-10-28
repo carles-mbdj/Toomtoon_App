@@ -1,43 +1,28 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Plus, Edit, Trash2, Eye, Image as ImageIcon } from 'lucide-react';
-import { episodesApi, webtoonsApi } from '../api/services';
+import { useDeleteEpisode, useEpisodesByWebtoon, useWebtoon } from '../hooks/queries';
+import { getErrorMessage } from '../utils/errors';
 import toast from 'react-hot-toast';
 
 export const Episodes: React.FC = () => {
   const { webtoonId } = useParams();
   const navigate = useNavigate();
-  const [webtoon, setWebtoon] = useState<any>(null);
-  const [episodes, setEpisodes] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchData();
-  }, [webtoonId]);
-
-  const fetchData = async () => {
-    try {
-      const [webtoonRes, episodesRes] = await Promise.all([
-        webtoonsApi.getById(webtoonId!),
-        episodesApi.getByWebtoon(webtoonId!),
-      ]);
-      setWebtoon(webtoonRes.data);
-      setEpisodes(episodesRes.data);
-    } catch (error) {
-      toast.error('Erreur lors du chargement');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const webtoonQuery = useWebtoon(webtoonId);
+  const episodesQuery = useEpisodesByWebtoon(webtoonId);
+  const webtoon = webtoonQuery.data ?? null;
+  const episodes = episodesQuery.data ?? [];
+  const loading = webtoonQuery.isLoading || episodesQuery.isLoading;
+  const deleteEpisode = useDeleteEpisode();
 
   const handleDelete = async (id: string, title: string) => {
     if (!confirm(`Supprimer "${title}" ?`)) return;
     try {
-      await episodesApi.delete(id);
+      await deleteEpisode.mutateAsync(id);
       toast.success('Épisode supprimé');
-      fetchData();
     } catch (error) {
-      toast.error('Erreur lors de la suppression');
+      toast.error(getErrorMessage(error, 'Erreur lors de la suppression'));
     }
   };
 
@@ -89,7 +74,7 @@ export const Episodes: React.FC = () => {
                   <h3 className="font-medium text-[var(--text)] truncate">{episode.title}</h3>
                   <div className="flex items-center gap-4 mt-1 text-sm text-[var(--text-muted)]">
                     <span className="flex items-center gap-1">
-                      <ImageIcon size={14} /> {episode.pages?.length || 0} pages
+                      <ImageIcon size={14} /> {episode.page_count || 0} pages
                     </span>
                     <span className="flex items-center gap-1">
                       <Eye size={14} /> {(episode.views || 0).toLocaleString()}

@@ -1,17 +1,9 @@
 import { create } from 'zustand';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { authApi, adminApi, userApi } from '../services/api';
+import { getToken, setToken, removeToken } from '../services/tokenStorage';
+import { authApi, userApi, type UserProfile } from '../services/api';
+import { getErrorMessage } from '../utils/errors';
 
-interface User {
-  id: string;
-  email: string;
-  username: string;
-  is_admin?: boolean;
-  subscription_type?: string;
-  subscription_end?: string;
-  notifications_enabled?: boolean;
-  language?: string;
-}
+type User = UserProfile;
 
 interface AuthState {
   user: User | null;
@@ -21,7 +13,6 @@ interface AuthState {
   isAdmin: boolean;
   error: string | null;
   login: (email: string, password: string) => Promise<boolean>;
-  adminLogin: (email: string, password: string) => Promise<boolean>;
   register: (email: string, password: string, username: string) => Promise<boolean>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
@@ -47,28 +38,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const response = await authApi.login(email, password);
       const { token, ...user } = response.data;
       
-      await AsyncStorage.setItem('auth_token', token);
+      await setToken(token);
       set({ user, token, isAuthenticated: true, isAdmin: user.is_admin || false, isLoading: false });
       return true;
-    } catch (error: any) {
-      const message = error.response?.data?.detail || 'Erreur de connexion';
-      set({ error: message, isLoading: false });
-      return false;
-    }
-  },
-
-  adminLogin: async (email: string, password: string) => {
-    try {
-      set({ isLoading: true, error: null });
-      const response = await adminApi.login(email, password);
-      const { token, ...user } = response.data;
-      
-      await AsyncStorage.setItem('auth_token', token);
-      set({ user, token, isAuthenticated: true, isAdmin: true, isLoading: false });
-      return true;
-    } catch (error: any) {
-      const message = error.response?.data?.detail || 'Identifiants administrateur invalides';
-      set({ error: message, isLoading: false });
+    } catch (error) {
+      set({ error: getErrorMessage(error, 'Erreur de connexion'), isLoading: false });
       return false;
     }
   },
@@ -79,25 +53,24 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const response = await authApi.register(email, password, username);
       const { token, ...user } = response.data;
       
-      await AsyncStorage.setItem('auth_token', token);
+      await setToken(token);
       set({ user, token, isAuthenticated: true, isLoading: false });
       return true;
-    } catch (error: any) {
-      const message = error.response?.data?.detail || 'Erreur d\'inscription';
-      set({ error: message, isLoading: false });
+    } catch (error) {
+      set({ error: getErrorMessage(error, "Erreur d'inscription"), isLoading: false });
       return false;
     }
   },
 
   logout: async () => {
-    await AsyncStorage.removeItem('auth_token');
+    await removeToken();
     set({ user: null, token: null, isAuthenticated: false, isAdmin: false });
   },
 
   checkAuth: async () => {
     try {
       set({ isLoading: true });
-      const token = await AsyncStorage.getItem('auth_token');
+      const token = await getToken();
       if (!token) {
         set({ isLoading: false, isAuthenticated: false });
         return;
@@ -112,7 +85,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         isLoading: false 
       });
     } catch (error) {
-      await AsyncStorage.removeItem('auth_token');
+      await removeToken();
       set({ user: null, token: null, isAuthenticated: false, isAdmin: false, isLoading: false });
     }
   },
@@ -125,9 +98,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const response = await userApi.updateProfile(data);
       set({ user: response.data, isLoading: false });
       return true;
-    } catch (error: any) {
-      const message = error.response?.data?.detail || 'Erreur de mise à jour';
-      set({ error: message, isLoading: false });
+    } catch (error) {
+      set({ error: getErrorMessage(error, 'Erreur de mise à jour'), isLoading: false });
       return false;
     }
   },
@@ -138,9 +110,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       await userApi.changePassword(currentPassword, newPassword);
       set({ isLoading: false });
       return true;
-    } catch (error: any) {
-      const message = error.response?.data?.detail || 'Erreur de changement de mot de passe';
-      set({ error: message, isLoading: false });
+    } catch (error) {
+      set({ error: getErrorMessage(error, 'Erreur de changement de mot de passe'), isLoading: false });
       return false;
     }
   },
@@ -149,12 +120,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       set({ isLoading: true, error: null });
       await userApi.deleteAccount();
-      await AsyncStorage.removeItem('auth_token');
+      await removeToken();
       set({ user: null, token: null, isAuthenticated: false, isAdmin: false, isLoading: false });
       return true;
-    } catch (error: any) {
-      const message = error.response?.data?.detail || 'Erreur de suppression du compte';
-      set({ error: message, isLoading: false });
+    } catch (error) {
+      set({ error: getErrorMessage(error, 'Erreur de suppression du compte'), isLoading: false });
       return false;
     }
   },
@@ -163,7 +133,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   refreshUser: async () => {
     try {
-      const token = await AsyncStorage.getItem('auth_token');
+      const token = await getToken();
       if (!token) return;
       
       const response = await authApi.getMe();

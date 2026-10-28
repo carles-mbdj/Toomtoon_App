@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { getErrorMessage } from '../utils/errors';
 import toast from 'react-hot-toast';
 import { LogIn, Eye, EyeOff } from 'lucide-react';
 
@@ -19,8 +20,8 @@ export const Login: React.FC = () => {
       await login(email, password);
       toast.success('Connexion réussie!');
       navigate('/');
-    } catch (error: any) {
-      toast.error(error.response?.data?.detail || 'Erreur de connexion');
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Erreur de connexion'));
     } finally {
       setLoading(false);
     }
@@ -92,10 +93,6 @@ export const Login: React.FC = () => {
             )}
           </button>
         </form>
-
-        <p className="text-center text-[var(--text-muted)] text-sm mt-6">
-          Identifiants par défaut: admin@toomtoon.com / admin123
-        </p>
       </div>
     </div>
   );

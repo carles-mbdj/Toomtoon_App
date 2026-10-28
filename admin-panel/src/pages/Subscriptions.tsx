@@ -1,43 +1,37 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { Plus, Edit, Trash2, CreditCard, Save, X, Check, DollarSign } from 'lucide-react';
-import { subscriptionsApi } from '../api/services';
+import type { SubscriptionPlan } from '../types';
+import { getErrorMessage } from '../utils/errors';
 import toast from 'react-hot-toast';
 import { ConfirmModal } from '../components/ConfirmModal';
+import {
+  useCreateSubscriptionPlan,
+  useDeleteSubscriptionPlan,
+  useSubscriptionPlans,
+  useUpdateSubscriptionPlan,
+} from '../hooks/queries';
 
 const CURRENCIES = ['EUR', 'USD', 'XAF'];
 
 export const Subscriptions: React.FC = () => {
-  const [plans, setPlans] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const plansQuery = useSubscriptionPlans();
+  const plans = plansQuery.data ?? [];
+  const loading = plansQuery.isLoading;
+  const createPlan = useCreateSubscriptionPlan();
+  const updatePlan = useUpdateSubscriptionPlan();
+  const deletePlan = useDeleteSubscriptionPlan();
+
   const [showModal, setShowModal] = useState(false);
-  const [editingPlan, setEditingPlan] = useState<any>(null);
-  const [deleteModal, setDeleteModal] = useState<{ open: boolean; plan: any | null }>({ open: false, plan: null });
+  const [editingPlan, setEditingPlan] = useState<SubscriptionPlan | null>(null);
+  const [deleteModal, setDeleteModal] = useState<{ open: boolean; plan: SubscriptionPlan | null }>({ open: false, plan: null });
   const [form, setForm] = useState({
     id: '',
     name: '',
     duration_days: 30,
-    prices: { EUR: 300, USD: 350, XAF: 2000 },
+    prices: { EUR: 300, USD: 350, XAF: 2000 } as Record<string, number>,
     features: '',
     popular: false,
   });
-
-  useEffect(() => {
-    fetchPlans();
-  }, []);
-
-  const fetchPlans = async () => {
-    try {
-      const response = await subscriptionsApi.getPlans();
-      if (response.data && response.data.length > 0) {
-        setPlans(response.data);
-      }
-    } catch (error) {
-      console.log('Error fetching plans');
-      toast.error('Erreur lors du chargement des plans');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleSave = async () => {
     if (!form.name.trim() || !form.id.trim()) {
@@ -57,21 +51,20 @@ export const Subscriptions: React.FC = () => {
 
     try {
       if (editingPlan) {
-        await subscriptionsApi.updatePlan(editingPlan.id, planData);
+        await updatePlan.mutateAsync({ id: editingPlan.id, data: planData });
         toast.success('Plan mis à jour');
       } else {
-        await subscriptionsApi.createPlan(planData);
+        await createPlan.mutateAsync(planData);
         toast.success('Plan créé');
       }
       setShowModal(false);
       resetForm();
-      fetchPlans();
-    } catch (error: any) {
-      toast.error(error.response?.data?.detail || 'Erreur');
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Erreur'));
     }
   };
 
-  const handleEdit = (plan: any) => {
+  const handleEdit = (plan: SubscriptionPlan) => {
     setEditingPlan(plan);
     setForm({
       id: plan.id,
@@ -86,14 +79,13 @@ export const Subscriptions: React.FC = () => {
 
   const handleDeleteConfirm = async () => {
     if (!deleteModal.plan) return;
-    
+
     try {
-      await subscriptionsApi.deletePlan(deleteModal.plan.id);
+      await deletePlan.mutateAsync(deleteModal.plan.id);
       toast.success('Plan désactivé');
       setDeleteModal({ open: false, plan: null });
-      fetchPlans();
-    } catch (error: any) {
-      toast.error(error.response?.data?.detail || 'Erreur lors de la suppression');
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Erreur lors de la suppression'));
     }
   };
 

@@ -1,78 +1,22 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { BookOpen, Users, Eye, Newspaper, Crown, TrendingUp, Calendar, Star } from 'lucide-react';
-import { webtoonsApi, usersApi, articlesApi } from '../api/services';
-import toast from 'react-hot-toast';
-
-interface Stats {
-  totalWebtoons: number;
-  totalUsers: number;
-  premiumUsers: number;
-  totalArticles: number;
-  totalViews: number;
-  featuredWebtoons: number;
-  completedWebtoons: number;
-  ongoingWebtoons: number;
-}
+import { useDashboardStats } from '../hooks/queries';
 
 export const Dashboard: React.FC = () => {
-  const [stats, setStats] = useState<Stats>({
-    totalWebtoons: 0,
-    totalUsers: 0,
-    premiumUsers: 0,
-    totalArticles: 0,
-    totalViews: 0,
-    featuredWebtoons: 0,
-    completedWebtoons: 0,
-    ongoingWebtoons: 0,
-  });
-  const [loading, setLoading] = useState(true);
-  const [recentWebtoons, setRecentWebtoons] = useState<any[]>([]);
-  const [recentUsers, setRecentUsers] = useState<any[]>([]);
+  const { data, isLoading: loading } = useDashboardStats();
 
-  useEffect(() => {
-    fetchStats();
-  }, []);
-
-  const fetchStats = async () => {
-    try {
-      const [webtoonsRes, usersRes, articlesRes] = await Promise.all([
-        webtoonsApi.getAll(),
-        usersApi.getAll(),
-        articlesApi.getAll(),
-      ]);
-
-      const webtoons = webtoonsRes.data || [];
-      const usersData = usersRes.data.users || usersRes.data || [];
-      const articles = articlesRes.data || [];
-
-      const premiumCount = usersData.filter((u: any) => 
-        u.subscription_type && u.subscription_type !== 'free' && u.subscription_type !== null
-      ).length;
-
-      const featuredCount = webtoons.filter((w: any) => w.is_featured).length;
-      const completedCount = webtoons.filter((w: any) => w.status === 'completed').length;
-      const ongoingCount = webtoons.filter((w: any) => w.status === 'ongoing').length;
-      const totalViews = webtoons.reduce((sum: number, w: any) => sum + (w.views || 0), 0);
-
-      setStats({
-        totalWebtoons: webtoons.length,
-        totalUsers: usersData.length,
-        premiumUsers: premiumCount,
-        totalArticles: articles.length,
-        totalViews: totalViews,
-        featuredWebtoons: featuredCount,
-        completedWebtoons: completedCount,
-        ongoingWebtoons: ongoingCount,
-      });
-
-      setRecentWebtoons(webtoons.slice(0, 5));
-      setRecentUsers(usersData.slice(0, 5));
-    } catch (error) {
-      toast.error('Erreur lors du chargement des statistiques');
-    } finally {
-      setLoading(false);
-    }
+  const stats = {
+    totalWebtoons: data?.total_webtoons || 0,
+    totalUsers: data?.total_users || 0,
+    premiumUsers: data?.premium_users || 0,
+    totalArticles: data?.total_articles || 0,
+    totalViews: data?.total_views || 0,
+    featuredWebtoons: data?.featured_webtoons || 0,
+    completedWebtoons: data?.completed_webtoons || 0,
+    ongoingWebtoons: data?.ongoing_webtoons || 0,
   };
+  const recentWebtoons = data?.recent_webtoons ?? [];
+  const recentUsers = data?.recent_users ?? [];
 
   const statCards = [
     { label: 'Webtoons', value: stats.totalWebtoons, icon: BookOpen, color: 'bg-blue-500', subtext: `${stats.ongoingWebtoons} en cours` },

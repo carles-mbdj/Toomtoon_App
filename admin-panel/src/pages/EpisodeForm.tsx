@@ -1,8 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Save } from 'lucide-react';
-import { episodesApi, webtoonsApi } from '../api/services';
+import { getErrorMessage } from '../utils/errors';
 import { MultiImageUpload } from '../components/MultiImageUpload';
+import {
+  useCreateEpisode,
+  useEpisode,
+  useEpisodesByWebtoon,
+  useUpdateEpisode,
+  useWebtoon,
+} from '../hooks/queries';
 import toast from 'react-hot-toast';
 
 export const EpisodeForm: React.FC = () => {
@@ -10,9 +17,6 @@ export const EpisodeForm: React.FC = () => {
   const navigate = useNavigate();
   const isEditing = !!episodeId && episodeId !== 'new';
 
-  const [webtoon, setWebtoon] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
     title: '',
     number: 1,
@@ -20,35 +24,32 @@ export const EpisodeForm: React.FC = () => {
     pages: [] as string[],
   });
 
+  const webtoonQuery = useWebtoon(webtoonId);
+  const webtoon = webtoonQuery.data ?? null;
+  const episodeQuery = useEpisode(isEditing ? episodeId : undefined);
+  const episodesListQuery = useEpisodesByWebtoon(!isEditing ? webtoonId : undefined);
+  const loading = webtoonQuery.isLoading || (isEditing && episodeQuery.isLoading);
+
+  const createEpisode = useCreateEpisode();
+  const updateEpisode = useUpdateEpisode();
+  const saving = createEpisode.isPending || updateEpisode.isPending;
+
   useEffect(() => {
-    fetchData();
-  }, [webtoonId, episodeId]);
+    const episode = episodeQuery.data;
+    if (!episode) return;
+    setForm({
+      title: episode.title,
+      number: episode.number,
+      is_free: episode.is_free,
+      pages: episode.pages || [],
+    });
+  }, [episodeQuery.data]);
 
-  const fetchData = async () => {
-    try {
-      const webtoonRes = await webtoonsApi.getById(webtoonId!);
-      setWebtoon(webtoonRes.data);
-
-      if (isEditing) {
-        const episodeRes = await episodesApi.getById(episodeId!);
-        setForm({
-          title: episodeRes.data.title,
-          number: episodeRes.data.number,
-          is_free: episodeRes.data.is_free,
-          pages: episodeRes.data.pages || [],
-        });
-      } else {
-        // Get next episode number
-        const episodesRes = await episodesApi.getByWebtoon(webtoonId!);
-        const nextNumber = episodesRes.data.length + 1;
-        setForm((prev) => ({ ...prev, number: nextNumber, title: `Épisode ${nextNumber}` }));
-      }
-    } catch (error) {
-      toast.error('Erreur lors du chargement');
-    } finally {
-      setLoading(false);
-    }
-  };
+  useEffect(() => {
+    if (isEditing || !episodesListQuery.data) return;
+    const nextNumber = episodesListQuery.data.length + 1;
+    setForm((prev) => ({ ...prev, number: nextNumber, title: `Épisode ${nextNumber}` }));
+  }, [isEditing, episodesListQuery.data]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,25 +58,22 @@ export const EpisodeForm: React.FC = () => {
       return;
     }
 
-    setSaving(true);
     try {
       const data = {
         ...form,
-        webtoon_id: webtoonId,
+        webtoon_id: webtoonId!,
       };
 
       if (isEditing) {
-        await episodesApi.update(episodeId!, data);
+        await updateEpisode.mutateAsync({ id: episodeId!, data });
         toast.success('Épisode mis à jour');
       } else {
-        await episodesApi.create(data);
+        await createEpisode.mutateAsync(data);
         toast.success('Épisode créé');
       }
       navigate(`/webtoons/${webtoonId}/episodes`);
-    } catch (error: any) {
-      toast.error(error.response?.data?.detail || 'Erreur lors de la sauvegarde');
-    } finally {
-      setSaving(false);
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Erreur lors de la sauvegarde'));
     }
   };
 

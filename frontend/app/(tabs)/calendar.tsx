@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -12,43 +12,27 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../src/constants/colors';
 import { Header } from '../../src/components/Header';
 import { LoadingSpinner } from '../../src/components/LoadingSpinner';
-import { scheduleApi } from '../../src/services/api';
 import { DAYS } from '../../src/constants/genres';
+import { useSchedule } from '../../src/hooks/queries';
 
 export default function CalendarScreen() {
   const router = useRouter();
-  const [schedule, setSchedule] = useState<any>({});
-  const [selectedDay, setSelectedDay] = useState('lundi');
-  const [loading, setLoading] = useState(true);
+  const [selectedDay, setSelectedDay] = useState(() => {
+    const dayMap = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
+    return dayMap[new Date().getDay()] || 'lundi';
+  });
   const [refreshing, setRefreshing] = useState(false);
 
-  const fetchSchedule = async () => {
-    try {
-      const response = await scheduleApi.get();
-      setSchedule(response.data);
-    } catch (error) {
-      console.log('Error fetching schedule:', error);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
+  const scheduleQuery = useSchedule();
+  const schedule = scheduleQuery.data ?? {};
 
-  useEffect(() => {
-    fetchSchedule();
-    
-    // Set current day as default
-    const today = new Date().getDay();
-    const dayMap = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
-    setSelectedDay(dayMap[today] || 'lundi');
-  }, []);
-
-  const onRefresh = () => {
+  const onRefresh = async () => {
     setRefreshing(true);
-    fetchSchedule();
+    await scheduleQuery.refetch();
+    setRefreshing(false);
   };
 
-  if (loading) {
+  if (scheduleQuery.isLoading) {
     return <LoadingSpinner fullScreen text="Chargement du calendrier..." />;
   }
 
@@ -111,7 +95,7 @@ export default function CalendarScreen() {
             <Text style={styles.emptyText}>Aucune diffusion ce jour</Text>
           </View>
         ) : (
-          currentDayWebtoons.map((webtoon: any) => (
+          currentDayWebtoons.map((webtoon) => (
             <TouchableOpacity
               key={webtoon.id}
               style={styles.webtoonCard}

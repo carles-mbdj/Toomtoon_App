@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/colors';
 
@@ -8,7 +9,7 @@ interface WebtoonCardProps {
   title: string;
   author: string;
   genre: string;
-  cover_image?: string;
+  cover_image?: string | null;
   views?: number;
   total_episodes?: number;
   onPress: () => void;
@@ -32,7 +33,13 @@ export const WebtoonCard: React.FC<WebtoonCardProps> = ({
     <TouchableOpacity style={[styles.card, cardStyle]} onPress={onPress} activeOpacity={0.8}>
       <View style={[styles.imageContainer, imageStyle]}>
         {cover_image ? (
-          <Image source={{ uri: cover_image }} style={styles.image} />
+          <Image
+            source={{ uri: cover_image }}
+            style={styles.image}
+            contentFit="cover"
+            transition={200}
+            cachePolicy="disk"
+          />
         ) : (
           <View style={styles.placeholderImage}>
             <Ionicons name="book" size={40} color={Colors.textMuted} />
@@ -97,7 +104,6 @@ const styles = StyleSheet.create({
   image: {
     width: '100%',
     height: '100%',
-    resizeMode: 'cover',
   },
   placeholderImage: {
     width: '100%',

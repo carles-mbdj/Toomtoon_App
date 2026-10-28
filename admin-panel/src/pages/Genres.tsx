@@ -1,31 +1,23 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { Plus, Edit, Trash2, Tag, Save, X } from 'lucide-react';
-import { genresApi } from '../api/services';
+import type { Genre } from '../types';
+import { getErrorMessage } from '../utils/errors';
 import toast from 'react-hot-toast';
 import { ConfirmModal } from '../components/ConfirmModal';
+import { useCreateGenre, useDeleteGenre, useGenres, useUpdateGenre } from '../hooks/queries';
 
 export const Genres: React.FC = () => {
-  const [genres, setGenres] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const genresQuery = useGenres();
+  const genres = genresQuery.data ?? [];
+  const loading = genresQuery.isLoading;
+  const createGenre = useCreateGenre();
+  const updateGenre = useUpdateGenre();
+  const deleteGenre = useDeleteGenre();
+
   const [showModal, setShowModal] = useState(false);
-  const [editingGenre, setEditingGenre] = useState<any>(null);
+  const [editingGenre, setEditingGenre] = useState<Genre | null>(null);
   const [formName, setFormName] = useState('');
-  const [deleteModal, setDeleteModal] = useState<{ open: boolean; genre: any | null }>({ open: false, genre: null });
-
-  useEffect(() => {
-    fetchGenres();
-  }, []);
-
-  const fetchGenres = async () => {
-    try {
-      const response = await genresApi.getAll();
-      setGenres(response.data);
-    } catch (error) {
-      toast.error('Erreur lors du chargement');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [deleteModal, setDeleteModal] = useState<{ open: boolean; genre: Genre | null }>({ open: false, genre: null });
 
   const handleSave = async () => {
     if (!formName.trim()) {
@@ -35,22 +27,21 @@ export const Genres: React.FC = () => {
 
     try {
       if (editingGenre) {
-        await genresApi.update(editingGenre.id, { name: formName });
+        await updateGenre.mutateAsync({ id: editingGenre.id, data: { name: formName } });
         toast.success('Genre mis à jour');
       } else {
-        await genresApi.create({ name: formName });
+        await createGenre.mutateAsync({ name: formName });
         toast.success('Genre créé');
       }
       setShowModal(false);
       setFormName('');
       setEditingGenre(null);
-      fetchGenres();
-    } catch (error: any) {
-      toast.error(error.response?.data?.detail || 'Erreur');
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Erreur'));
     }
   };
 
-  const handleEdit = (genre: any) => {
+  const handleEdit = (genre: Genre) => {
     setEditingGenre(genre);
     setFormName(genre.name);
     setShowModal(true);
@@ -58,15 +49,13 @@ export const Genres: React.FC = () => {
 
   const handleDeleteConfirm = async () => {
     if (!deleteModal.genre) return;
-    
+
     try {
-      await genresApi.delete(deleteModal.genre.id);
+      await deleteGenre.mutateAsync(deleteModal.genre.id);
       toast.success('Genre supprimé');
       setDeleteModal({ open: false, genre: null });
-      fetchGenres();
-    } catch (error: any) {
-      const message = error.response?.data?.detail || 'Erreur lors de la suppression';
-      toast.error(message);
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Erreur lors de la suppression'));
     }
   };
 
@@ -204,14 +193,14 @@ export const Genres: React.FC = () => {
         isOpen={deleteModal.open}
         title="Supprimer le genre"
         message={
-          deleteModal.genre?.webtoon_count > 0
+          (deleteModal.genre?.webtoon_count ?? 0) > 0
             ? `Attention : "${deleteModal.genre?.name}" est utilisé par ${deleteModal.genre?.webtoon_count} webtoon(s). Vous ne pouvez pas supprimer un genre utilisé.`
             : `Êtes-vous sûr de vouloir supprimer le genre "${deleteModal.genre?.name}" ?`
         }
-        confirmText={deleteModal.genre?.webtoon_count > 0 ? 'Compris' : 'Supprimer'}
+        confirmText={(deleteModal.genre?.webtoon_count ?? 0) > 0 ? 'Compris' : 'Supprimer'}
         cancelText="Annuler"
-        variant={deleteModal.genre?.webtoon_count > 0 ? 'warning' : 'danger'}
-        onConfirm={deleteModal.genre?.webtoon_count > 0 
+        variant={(deleteModal.genre?.webtoon_count ?? 0) > 0 ? 'warning' : 'danger'}
+        onConfirm={(deleteModal.genre?.webtoon_count ?? 0) > 0 
           ? () => setDeleteModal({ open: false, genre: null })
           : handleDeleteConfirm
         }

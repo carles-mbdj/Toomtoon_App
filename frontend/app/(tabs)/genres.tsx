@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -14,40 +14,24 @@ import { Colors } from '../../src/constants/colors';
 import { Header } from '../../src/components/Header';
 import { WebtoonCard } from '../../src/components/WebtoonCard';
 import { LoadingSpinner } from '../../src/components/LoadingSpinner';
-import { webtoonsApi } from '../../src/services/api';
 import { GENRES } from '../../src/constants/genres';
+import { useWebtoons } from '../../src/hooks/queries';
 
 export default function GenresScreen() {
   const router = useRouter();
   const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
-  const [webtoons, setWebtoons] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const fetchWebtoons = async (genre?: string) => {
-    try {
-      const response = await webtoonsApi.getAll(
-        genre ? { genre } : undefined
-      );
-      setWebtoons(response.data);
-    } catch (error) {
-      console.log('Error fetching webtoons:', error);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
+  const webtoonsQuery = useWebtoons(selectedGenre ? { genre: selectedGenre } : undefined);
+  const webtoons = webtoonsQuery.data ?? [];
 
-  useEffect(() => {
-    fetchWebtoons(selectedGenre || undefined);
-  }, [selectedGenre]);
-
-  const onRefresh = () => {
+  const onRefresh = async () => {
     setRefreshing(true);
-    fetchWebtoons(selectedGenre || undefined);
+    await webtoonsQuery.refetch();
+    setRefreshing(false);
   };
 
-  if (loading) {
+  if (webtoonsQuery.isLoading) {
     return <LoadingSpinner fullScreen text="Chargement des genres..." />;
   }
 
@@ -93,7 +77,7 @@ export default function GenresScreen() {
             onPress={() => setSelectedGenre(genre.id)}
           >
             <Ionicons
-              name={genre.icon as any}
+              name={genre.icon as React.ComponentProps<typeof Ionicons>['name']}
               size={18}
               color={
                 selectedGenre === genre.id
@@ -135,7 +119,7 @@ export default function GenresScreen() {
 
         {/* Webtoons Grid */}
         <View style={styles.grid}>
-          {webtoons.map((webtoon: any) => (
+          {webtoons.map((webtoon) => (
             <View key={webtoon.id} style={styles.gridItem}>
               <WebtoonCard
                 {...webtoon}

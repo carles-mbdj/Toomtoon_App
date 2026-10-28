@@ -1,38 +1,26 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Search, Edit, Trash2, Eye, Layers, BookOpen } from 'lucide-react';
-import { webtoonsApi } from '../api/services';
+import { useDeleteWebtoon, useWebtoons } from '../hooks/queries';
+import { getErrorMessage } from '../utils/errors';
 import toast from 'react-hot-toast';
 
 export const Webtoons: React.FC = () => {
-  const [webtoons, setWebtoons] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const navigate = useNavigate();
 
-  useEffect(() => {
-    fetchWebtoons();
-  }, []);
-
-  const fetchWebtoons = async () => {
-    try {
-      const response = await webtoonsApi.getAll();
-      setWebtoons(response.data);
-    } catch (error) {
-      toast.error('Erreur lors du chargement');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const webtoonsQuery = useWebtoons();
+  const webtoons = webtoonsQuery.data ?? [];
+  const loading = webtoonsQuery.isLoading;
+  const deleteWebtoon = useDeleteWebtoon();
 
   const handleDelete = async (id: string, title: string) => {
     if (!confirm(`Supprimer "${title}" ?`)) return;
     try {
-      await webtoonsApi.delete(id);
+      await deleteWebtoon.mutateAsync(id);
       toast.success('Webtoon supprimé');
-      fetchWebtoons();
     } catch (error) {
-      toast.error('Erreur lors de la suppression');
+      toast.error(getErrorMessage(error, 'Erreur lors de la suppression'));
     }
   };
 

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -6,14 +6,14 @@ import {
   ScrollView,
   TouchableOpacity,
   RefreshControl,
-  Image,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../src/constants/colors';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LoadingSpinner } from '../src/components/LoadingSpinner';
-import { articlesApi } from '../src/services/api';
+import { useArticles } from '../src/hooks/queries';
 
 const CATEGORIES = [
   { id: 'all', name: 'Tous', icon: 'newspaper' },
@@ -26,36 +26,20 @@ const CATEGORIES = [
 export default function MagazineScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const [articles, setArticles] = useState<any[]>([]);
-  const [featuredArticles, setFeaturedArticles] = useState<any[]>([]);
   const [selectedCategory, setSelectedCategory] = useState('all');
-  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    fetchArticles();
-  }, [selectedCategory]);
+  const articlesQuery = useArticles(selectedCategory !== 'all' ? { category: selectedCategory } : undefined);
+  const featuredQuery = useArticles({ featured: true });
 
-  const fetchArticles = async () => {
-    try {
-      const params = selectedCategory !== 'all' ? { category: selectedCategory } : {};
-      const response = await articlesApi.getAll(params);
-      setArticles(response.data);
-      
-      // Get featured articles
-      const featuredRes = await articlesApi.getAll({ featured: true });
-      setFeaturedArticles(featuredRes.data);
-    } catch (error) {
-      console.log('Error fetching articles:', error);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
+  const articles = articlesQuery.data ?? [];
+  const featuredArticles = featuredQuery.data ?? [];
+  const loading = articlesQuery.isLoading || featuredQuery.isLoading;
 
-  const onRefresh = () => {
+  const onRefresh = async () => {
     setRefreshing(true);
-    fetchArticles();
+    await Promise.all([articlesQuery.refetch(), featuredQuery.refetch()]);
+    setRefreshing(false);
   };
 
   if (loading) {
@@ -93,7 +77,7 @@ export default function MagazineScreen() {
             onPress={() => setSelectedCategory(cat.id)}
           >
             <Ionicons
-              name={cat.icon as any}
+              name={cat.icon as React.ComponentProps<typeof Ionicons>['name']}
               size={16}
               color={selectedCategory === cat.id ? Colors.white : Colors.textSecondary}
             />
@@ -124,7 +108,13 @@ export default function MagazineScreen() {
           >
             <View style={styles.featuredImage}>
               {featuredArticles[0].cover_image ? (
-                <Image source={{ uri: featuredArticles[0].cover_image }} style={styles.featuredImg} />
+                <Image
+                  source={{ uri: featuredArticles[0].cover_image }}
+                  style={styles.featuredImg}
+                  contentFit="cover"
+                  transition={200}
+                  cachePolicy="disk"
+                />
               ) : (
                 <Ionicons name="document-text" size={60} color={Colors.primary} />
               )}
@@ -159,7 +149,13 @@ export default function MagazineScreen() {
             >
               <View style={styles.articleImage}>
                 {article.cover_image ? (
-                  <Image source={{ uri: article.cover_image }} style={styles.articleImg} />
+                  <Image
+                    source={{ uri: article.cover_image }}
+                    style={styles.articleImg}
+                    contentFit="cover"
+                    transition={200}
+                    cachePolicy="disk"
+                  />
                 ) : (
                   <Ionicons name="document-text" size={30} color={Colors.primary} />
                 )}
@@ -212,7 +208,7 @@ const styles = StyleSheet.create({
   scrollView: { flex: 1 },
   featuredCard: { backgroundColor: Colors.surface, margin: 16, borderRadius: 16, overflow: 'hidden' },
   featuredImage: { height: 180, backgroundColor: Colors.surfaceLight, justifyContent: 'center', alignItems: 'center', position: 'relative' },
-  featuredImg: { width: '100%', height: '100%', resizeMode: 'cover' },
+  featuredImg: { width: '100%', height: '100%' },
   featuredBadge: { position: 'absolute', top: 12, left: 12, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.7)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, gap: 4 },
   featuredBadgeText: { color: Colors.gold, fontSize: 12, fontWeight: '600' },
   featuredInfo: { padding: 16 },
@@ -225,7 +221,7 @@ const styles = StyleSheet.create({
   articlesList: { paddingHorizontal: 16 },
   articleCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.surface, padding: 12, borderRadius: 12, marginBottom: 12 },
   articleImage: { width: 70, height: 70, borderRadius: 10, backgroundColor: Colors.surfaceLight, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-  articleImg: { width: '100%', height: '100%', borderRadius: 10, resizeMode: 'cover' },
+  articleImg: { width: '100%', height: '100%', borderRadius: 10 },
   articleInfo: { flex: 1 },
   articleCategory: { backgroundColor: Colors.primary, alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, marginBottom: 6 },
   articleCategoryText: { color: Colors.white, fontSize: 10, fontWeight: '600' },

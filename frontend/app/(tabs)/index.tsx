@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -14,46 +14,29 @@ import { Colors } from '../../src/constants/colors';
 import { Header } from '../../src/components/Header';
 import { WebtoonCard } from '../../src/components/WebtoonCard';
 import { LoadingSpinner } from '../../src/components/LoadingSpinner';
-import { webtoonsApi, episodesApi } from '../../src/services/api';
 import { useAuthStore } from '../../src/store/authStore';
+import { useFeaturedWebtoons, useRecentEpisodes, useWebtoons } from '../../src/hooks/queries';
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { isAuthenticated, user } = useAuthStore();
-  const [featuredWebtoons, setFeaturedWebtoons] = useState([]);
-  const [recentEpisodes, setRecentEpisodes] = useState([]);
-  const [allWebtoons, setAllWebtoons] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { isAuthenticated } = useAuthStore();
   const [refreshing, setRefreshing] = useState(false);
 
-  const fetchData = async () => {
-    try {
-      const [featured, recent, all] = await Promise.all([
-        webtoonsApi.getFeatured(),
-        episodesApi.getRecent(),
-        webtoonsApi.getAll(),
-      ]);
-      setFeaturedWebtoons(featured.data);
-      setRecentEpisodes(recent.data);
-      setAllWebtoons(all.data);
-    } catch (error) {
-      console.log('Error fetching data:', error);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
+  const featuredQuery = useFeaturedWebtoons();
+  const recentQuery = useRecentEpisodes();
+  const allQuery = useWebtoons();
 
-  useEffect(() => {
-    fetchData();
-  }, []);
+  const featuredWebtoons = featuredQuery.data ?? [];
+  const recentEpisodes = recentQuery.data ?? [];
+  const allWebtoons = allQuery.data ?? [];
 
-  const onRefresh = () => {
+  const onRefresh = async () => {
     setRefreshing(true);
-    fetchData();
+    await Promise.all([featuredQuery.refetch(), recentQuery.refetch(), allQuery.refetch()]);
+    setRefreshing(false);
   };
 
-  if (loading) {
+  if (featuredQuery.isLoading || recentQuery.isLoading || allQuery.isLoading) {
     return <LoadingSpinner fullScreen text="Chargement des webtoons..." />;
   }
 
@@ -91,8 +74,8 @@ export default function HomeScreen() {
           <FlatList
             horizontal
             data={featuredWebtoons}
-            keyExtractor={(item: any) => item.id}
-            renderItem={({ item }: any) => (
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => (
               <WebtoonCard
                 {...item}
                 size="large"
@@ -110,8 +93,8 @@ export default function HomeScreen() {
           <FlatList
             horizontal
             data={recentEpisodes.slice(0, 5)}
-            keyExtractor={(item: any) => item.id}
-            renderItem={({ item }: any) => (
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => (
               <TouchableOpacity
                 style={styles.recentEpisode}
                 onPress={() => router.push(`/webtoon/${item.webtoon_id}`)}
@@ -137,9 +120,9 @@ export default function HomeScreen() {
           <Text style={styles.sectionTitle}>Séries en cours</Text>
           <FlatList
             horizontal
-            data={allWebtoons.filter((w: any) => w.status === 'ongoing')}
-            keyExtractor={(item: any) => item.id}
-            renderItem={({ item }: any) => (
+            data={allWebtoons.filter((w) => w.status === 'ongoing')}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => (
               <WebtoonCard
                 {...item}
                 size="medium"

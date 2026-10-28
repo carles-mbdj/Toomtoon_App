@@ -1,9 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Search, Edit, Trash2, Eye, Newspaper } from 'lucide-react';
-import { articlesApi } from '../api/services';
+import type { Article } from '../types';
+import { getErrorMessage } from '../utils/errors';
 import toast from 'react-hot-toast';
 import { ConfirmModal } from '../components/ConfirmModal';
+import { useArticles, useDeleteArticle } from '../hooks/queries';
 
 const CATEGORIES = [
   { value: 'all', label: 'Tous' },
@@ -21,37 +23,24 @@ const stripHtml = (html: string) => {
 };
 
 export const Articles: React.FC = () => {
-  const [articles, setArticles] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const articlesQuery = useArticles();
+  const articles = articlesQuery.data ?? [];
+  const loading = articlesQuery.isLoading;
+  const deleteArticle = useDeleteArticle();
+
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('all');
-  const [deleteModal, setDeleteModal] = useState<{ open: boolean; article: any | null }>({ open: false, article: null });
+  const [deleteModal, setDeleteModal] = useState<{ open: boolean; article: Article | null }>({ open: false, article: null });
   const navigate = useNavigate();
-
-  useEffect(() => {
-    fetchArticles();
-  }, []);
-
-  const fetchArticles = async () => {
-    try {
-      const response = await articlesApi.getAll();
-      setArticles(response.data);
-    } catch (error) {
-      toast.error('Erreur lors du chargement');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleDeleteConfirm = async () => {
     if (!deleteModal.article) return;
     try {
-      await articlesApi.delete(deleteModal.article.id);
+      await deleteArticle.mutateAsync(deleteModal.article.id);
       toast.success('Article supprimé');
       setDeleteModal({ open: false, article: null });
-      fetchArticles();
     } catch (error) {
-      toast.error('Erreur lors de la suppression');
+      toast.error(getErrorMessage(error, 'Erreur lors de la suppression'));
     }
   };
 
@@ -65,9 +54,9 @@ export const Articles: React.FC = () => {
     return CATEGORIES.find((c) => c.value === cat)?.label || cat;
   };
 
-  // Get excerpt - use provided excerpt or generate from content
-  const getExcerpt = (article: any) => {
-    if (article.excerpt) return article.excerpt;
+  // Get excerpt - use provided subtitle or generate from content
+  const getExcerpt = (article: Article) => {
+    if (article.subtitle) return article.subtitle;
     if (article.content) {
       const plainText = stripHtml(article.content);
       return plainText.length > 150 ? plainText.substring(0, 150) + '...' : plainText;
@@ -147,7 +136,7 @@ export const Articles: React.FC = () => {
                     <span className="px-2 py-1 bg-[var(--primary)]/20 text-[var(--primary)] text-xs font-medium rounded-full">
                       {getCategoryLabel(article.category)}
                     </span>
-                    {article.is_featured && (
+                    {article.featured && (
                       <span className="px-2 py-1 bg-yellow-500/20 text-yellow-500 text-xs font-medium rounded-full">
                         À la une
                       </span>
@@ -161,7 +150,7 @@ export const Articles: React.FC = () => {
                     {getExcerpt(article)}
                   </p>
                   <p className="text-[var(--text-muted)] text-xs mt-2">
-                    Par {article.author || 'Admin'} • {new Date(article.created_at).toLocaleDateString('fr-FR')}
+                    Par {article.author || 'Admin'} • {article.created_at ? new Date(article.created_at).toLocaleDateString('fr-FR') : '-'}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">

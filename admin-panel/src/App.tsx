@@ -1,6 +1,8 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'react-hot-toast';
+import { queryClient } from './api/queryClient';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { Layout } from './components/Layout';
@@ -15,6 +17,7 @@ import { Articles } from './pages/Articles';
 import { ArticleForm } from './pages/ArticleForm';
 import { Genres } from './pages/Genres';
 import { Subscriptions } from './pages/Subscriptions';
+import { Payments } from './pages/Payments';
 import { Settings } from './pages/Settings';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -57,6 +60,7 @@ function AppRoutes() {
         <Route path="users" element={<Users />} />
         <Route path="genres" element={<Genres />} />
         <Route path="subscriptions" element={<Subscriptions />} />
+        <Route path="payments" element={<Payments />} />
         <Route path="articles" element={<Articles />} />
         <Route path="articles/new" element={<ArticleForm />} />
         <Route path="articles/:id" element={<ArticleForm />} />
@@ -68,36 +72,38 @@ function AppRoutes() {
 
 function App() {
   return (
-    <BrowserRouter basename="/api/admin">
-      <ThemeProvider>
-        <AuthProvider>
-          <AppRoutes />
-          <Toaster
-            position="top-right"
-            toastOptions={{
-              duration: 3000,
-              style: {
-                background: 'var(--surface)',
-                color: 'var(--text)',
-                border: '1px solid var(--border)',
-              },
-              success: {
-                iconTheme: {
-                  primary: '#48BB78',
-                  secondary: '#F7FAFC',
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter basename="/api/admin">
+        <ThemeProvider>
+          <AuthProvider>
+            <AppRoutes />
+            <Toaster
+              position="top-right"
+              toastOptions={{
+                duration: 3000,
+                style: {
+                  background: 'var(--surface)',
+                  color: 'var(--text)',
+                  border: '1px solid var(--border)',
                 },
-              },
-              error: {
-                iconTheme: {
-                  primary: '#F56565',
-                  secondary: '#F7FAFC',
+                success: {
+                  iconTheme: {
+                    primary: '#48BB78',
+                    secondary: '#F7FAFC',
+                  },
                 },
-              },
-            }}
-          />
-        </AuthProvider>
-      </ThemeProvider>
-    </BrowserRouter>
+                error: {
+                  iconTheme: {
+                    primary: '#F56565',
+                    secondary: '#F7FAFC',
+                  },
+                },
+              }}
+            />
+          </AuthProvider>
+        </ThemeProvider>
+      </BrowserRouter>
+    </QueryClientProvider>
   );
 }
 

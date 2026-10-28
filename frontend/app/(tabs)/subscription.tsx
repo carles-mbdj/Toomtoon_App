@@ -12,49 +12,29 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../src/constants/colors';
 import { Header } from '../../src/components/Header';
 import { LoadingSpinner } from '../../src/components/LoadingSpinner';
-import { subscriptionApi } from '../../src/services/api';
 import { useAuthStore } from '../../src/store/authStore';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSubscriptionPlans } from '../../src/hooks/queries';
 
 export default function SubscriptionScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { isAuthenticated, user } = useAuthStore();
-  const [plans, setPlans] = useState<any[]>([]);
+  const plansQuery = useSubscriptionPlans();
+  const plans = plansQuery.data ?? [];
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showSelectPlanModal, setShowSelectPlanModal] = useState(false);
 
   useEffect(() => {
-    fetchPlans();
-  }, []);
-
-  const fetchPlans = async () => {
-    try {
-      const response = await subscriptionApi.getPlans();
-      // Handle both array format (new) and object format (old)
-      const plansData = Array.isArray(response.data) ? response.data : Object.entries(response.data).map(([key, value]: [string, any]) => ({
-        id: key,
-        name: value.label || key,
-        duration_days: value.days || 30,
-        prices: { EUR: value.price * 100 },
-        features: ['Accès illimité', 'Sans publicité'],
-        popular: key === '3_months',
-      }));
-      setPlans(plansData);
-      
-      // Auto-select popular plan
-      const popularPlan = plansData.find((p: any) => p.popular);
+    // Auto-select the popular plan once plans have loaded
+    if (!selectedPlan && plans.length > 0) {
+      const popularPlan = plans.find((p) => p.popular);
       if (popularPlan) {
         setSelectedPlan(popularPlan.id);
       }
-    } catch (error) {
-      console.log('Error fetching plans:', error);
-    } finally {
-      setLoading(false);
     }
-  };
+  }, [plans, selectedPlan]);
 
   const handleContinue = () => {
     if (!isAuthenticated) {
@@ -71,7 +51,7 @@ export default function SubscriptionScreen() {
     router.push(`/payment?planId=${selectedPlan}`);
   };
 
-  if (loading) {
+  if (plansQuery.isLoading) {
     return <LoadingSpinner fullScreen text="Chargement des offres..." />;
   }
 
@@ -138,7 +118,7 @@ export default function SubscriptionScreen() {
         {/* Plans */}
         <Text style={styles.plansTitle}>Choisissez votre plan</Text>
         <View style={styles.plansContainer}>
-          {plans.map((plan: any) => (
+          {plans.map((plan) => (
             <TouchableOpacity
               key={plan.id}
               style={[
@@ -162,7 +142,7 @@ export default function SubscriptionScreen() {
                 <Text style={styles.planLabel}>{plan.name}</Text>
               </View>
               <Text style={styles.planPrice}>
-                {plan.prices?.EUR ? `${(plan.prices.EUR / 100).toFixed(0)}€` : `${plan.price || 0}€`}
+                {plan.prices?.EUR ? `${(plan.prices.EUR / 100).toFixed(0)}€` : '0€'}
               </Text>
               <Text style={styles.planPriceDetail}>
                 {plan.duration_days} jours

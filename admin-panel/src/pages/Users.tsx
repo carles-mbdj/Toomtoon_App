@@ -1,76 +1,60 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { Search, Crown, User, Trash2, Calendar } from 'lucide-react';
-import { usersApi } from '../api/services';
-import { subscriptionsApi } from '../api/services';
+import type { AdminUser } from '../types';
+import { getErrorMessage } from '../utils/errors';
 import toast from 'react-hot-toast';
 import { ConfirmModal } from '../components/ConfirmModal';
+import { useAdminUsers, useDeleteUser, useSubscriptionPlans, useUpdateUserSubscription } from '../hooks/queries';
 
 export const Users: React.FC = () => {
-  const [users, setUsers] = useState<any[]>([]);
-  const [plans, setPlans] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const usersQuery = useAdminUsers();
+  const plansQuery = useSubscriptionPlans();
+  const users = usersQuery.data?.users ?? [];
+  const plans = plansQuery.data ?? [];
+  const loading = usersQuery.isLoading;
+  const updateUserSubscription = useUpdateUserSubscription();
+  const deleteUser = useDeleteUser();
+
   const [search, setSearch] = useState('');
-  
+
   // Modal states
-  const [deleteModal, setDeleteModal] = useState<{ open: boolean; user: any | null }>({ open: false, user: null });
-  const [subscriptionModal, setSubscriptionModal] = useState<{ open: boolean; user: any | null }>({ open: false, user: null });
+  const [deleteModal, setDeleteModal] = useState<{ open: boolean; user: AdminUser | null }>({ open: false, user: null });
+  const [subscriptionModal, setSubscriptionModal] = useState<{ open: boolean; user: AdminUser | null }>({ open: false, user: null });
   const [selectedPlan, setSelectedPlan] = useState<string>('none');
 
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  const fetchData = async () => {
-    try {
-      const [usersRes, plansRes] = await Promise.all([
-        usersApi.getAll(),
-        subscriptionsApi.getPlans()
-      ]);
-      const usersData = usersRes.data.users || usersRes.data;
-      setUsers(Array.isArray(usersData) ? usersData : []);
-      setPlans(Array.isArray(plansRes.data) ? plansRes.data : []);
-    } catch (error) {
-      toast.error('Erreur lors du chargement');
-      setUsers([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const openSubscriptionModal = (user: any) => {
+  const openSubscriptionModal = (user: AdminUser) => {
     setSelectedPlan(user.subscription_type || 'none');
     setSubscriptionModal({ open: true, user });
   };
 
   const handleUpdateSubscription = async () => {
     if (!subscriptionModal.user) return;
-    
+
     try {
-      await usersApi.update(subscriptionModal.user.id, { 
-        subscription_type: selectedPlan === 'none' ? null : selectedPlan 
+      await updateUserSubscription.mutateAsync({
+        id: subscriptionModal.user.id,
+        subscription_type: selectedPlan === 'none' ? null : selectedPlan,
       });
       toast.success('Abonnement mis à jour');
       setSubscriptionModal({ open: false, user: null });
-      fetchData();
     } catch (error) {
-      toast.error('Erreur lors de la mise à jour');
+      toast.error(getErrorMessage(error, 'Erreur lors de la mise à jour'));
     }
   };
 
   const handleDelete = async () => {
     if (!deleteModal.user) return;
-    
+
     try {
-      await usersApi.delete(deleteModal.user.id);
+      await deleteUser.mutateAsync(deleteModal.user.id);
       toast.success('Utilisateur supprimé');
       setDeleteModal({ open: false, user: null });
-      fetchData();
     } catch (error) {
-      toast.error('Erreur lors de la suppression');
+      toast.error(getErrorMessage(error, 'Erreur lors de la suppression'));
     }
   };
 
-  const getSubscriptionStatus = (user: any) => {
+  const getSubscriptionStatus = (user: AdminUser) => {
     if (!user.subscription_type) {
       return { label: 'Free', color: 'bg-gray-500/20 text-gray-400', active: false };
     }

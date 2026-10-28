@@ -1,8 +1,11 @@
-# Environment files - NEVER commit
+# Environment and credential files - NEVER commit
 .env
 .env.local
 .env.*.local
 *.env
+*.env.*
+credentials.json
+.credentials
 
 # Dependencies
 node_modules/
@@ -41,30 +44,9 @@ Thumbs.db
 coverage/
 .nyc_output/
 test_reports/
+.pytest_cache/
 
 # Secrets - NEVER commit
 *.pem
 *.key
 secrets/
--e 
-# Environment files
-*.env
-*.env.*
--e 
-# Environment and credential files
-.env
-.env.*
-*.env
-credentials.json
-*.pem
-*.key
-.credentials
--e 
-# Environment and credential files
-.env
-.env.*
-*.env
-credentials.json
-*.pem
-*.key
-.credentials

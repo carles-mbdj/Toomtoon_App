@@ -1,5 +1,6 @@
 import axios from 'axios';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getToken } from './tokenStorage';
+import type { Article, Comment, Episode, Genre, HistoryEntry, RecentEpisode, SubscriptionPlan, Webtoon } from '../types';
 
 const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
 
@@ -17,7 +18,7 @@ const api = axios.create({
 // Add auth token to requests
 api.interceptors.request.use(async (config) => {
   try {
-    const token = await AsyncStorage.getItem('auth_token');
+    const token = await getToken();
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -27,19 +28,34 @@ api.interceptors.request.use(async (config) => {
   return config;
 });
 
+export interface UserProfile {
+  id: string;
+  email: string;
+  username: string;
+  is_admin?: boolean;
+  subscription_type?: string | null;
+  subscription_end?: string | null;
+  notifications_enabled?: boolean;
+  language?: string;
+}
+
+interface AuthResponse extends UserProfile {
+  token: string;
+}
+
 // Auth API
 export const authApi = {
   register: (email: string, password: string, username: string) =>
-    api.post('/auth/register', { email, password, username }),
+    api.post<AuthResponse>('/auth/register', { email, password, username }),
   login: (email: string, password: string) =>
-    api.post('/auth/login', { email, password }),
-  getMe: () => api.get('/auth/me'),
+    api.post<AuthResponse>('/auth/login', { email, password }),
+  getMe: () => api.get<UserProfile>('/auth/me'),
 };
 
 // User Settings API
 export const userApi = {
   updateProfile: (data: { username?: string; email?: string; notifications_enabled?: boolean; language?: string }) =>
-    api.put('/user/profile', data),
+    api.put<UserProfile>('/user/profile', data),
   changePassword: (current_password: string, new_password: string) =>
     api.put('/user/password', { current_password, new_password }),
   deleteAccount: () => api.delete('/user/account'),
@@ -55,33 +71,31 @@ export const notificationsApi = {
 // Webtoons API
 export const webtoonsApi = {
   getAll: (params?: { genre?: string; status?: string; search?: string }) =>
-    api.get('/webtoons', { params }),
-  getFeatured: () => api.get('/webtoons/featured'),
-  getById: (id: string) => api.get(`/webtoons/${id}`),
-  create: (data: any) => api.post('/webtoons', data),
+    api.get<Webtoon[]>('/webtoons', { params }),
+  getFeatured: () => api.get<Webtoon[]>('/webtoons/featured'),
+  getById: (id: string) => api.get<Webtoon>(`/webtoons/${id}`),
 };
 
 // Episodes API
 export const episodesApi = {
-  getByWebtoon: (webtoonId: string) => api.get(`/webtoons/${webtoonId}/episodes`),
-  getRecent: () => api.get('/episodes/recent'),
-  getById: (id: string) => api.get(`/episodes/${id}`),
-  create: (data: any) => api.post('/episodes', data),
+  getByWebtoon: (webtoonId: string) => api.get<Episode[]>(`/webtoons/${webtoonId}/episodes`),
+  getRecent: () => api.get<RecentEpisode[]>('/episodes/recent'),
+  getById: (id: string) => api.get<Episode>(`/episodes/${id}`),
 };
 
 // Genres API
 export const genresApi = {
-  getAll: () => api.get('/genres'),
+  getAll: () => api.get<Genre[]>('/genres'),
 };
 
 // Schedule API
 export const scheduleApi = {
-  get: () => api.get('/schedule'),
+  get: () => api.get<Record<string, Webtoon[]>>('/schedule'),
 };
 
 // Subscription API
 export const subscriptionApi = {
-  getPlans: () => api.get('/subscriptions/plans'),
+  getPlans: () => api.get<SubscriptionPlan[]>('/subscriptions/plans'),
   subscribe: (plan: string) => api.post('/subscriptions/subscribe', { plan }),
 };
 
@@ -110,14 +124,27 @@ export const paymentApi = {
     api.post(`/payments/${paymentIntentId}/test-confirm`),
 };
 
+interface CheckoutSession {
+  checkout_url: string;
+  session_id: string;
+}
+
+interface CheckoutSessionStatus {
+  session_id: string;
+  status: string;
+  payment_status: string;
+  subscription_id?: string | null;
+  customer_email?: string | null;
+}
+
 // Stripe Checkout API (Production)
 export const checkoutApi = {
   // Create a Stripe Checkout session
   createSession: (plan_id: string, currency: string = 'EUR', success_url?: string, cancel_url?: string) =>
-    api.post('/checkout/create-session', { plan_id, currency, success_url, cancel_url }),
-  
+    api.post<CheckoutSession>('/checkout/create-session', { plan_id, currency, success_url, cancel_url }),
+
   // Get session status after redirect
-  getSessionStatus: (sessionId: string) => api.get(`/checkout/session/${sessionId}`),
+  getSessionStatus: (sessionId: string) => api.get<CheckoutSessionStatus>(`/checkout/session/${sessionId}`),
   
   // Get subscription status
   getSubscriptionStatus: () => api.get('/checkout/subscription-status'),
@@ -144,25 +171,31 @@ function generateUUID(): string {
 export const historyApi = {
   save: (webtoonId: string, episodeId: string, page: number) =>
     api.post(`/history?webtoon_id=${webtoonId}&episode_id=${episodeId}&page=${page}`),
-  get: () => api.get('/history'),
+  get: () => api.get<HistoryEntry[]>('/history'),
   clear: () => api.delete('/history'),
 };
+
+interface LikeCommentResponse {
+  success: boolean;
+  action: 'liked' | 'unliked';
+  likes: number;
+}
 
 // Comments API
 export const commentsApi = {
   get: (params?: { webtoon_id?: string; episode_id?: string; article_id?: string }) =>
-    api.get('/comments', { params }),
+    api.get<Comment[]>('/comments', { params }),
   create: (data: { webtoon_id?: string; episode_id?: string; article_id?: string; content: string }) =>
-    api.post('/comments', data),
-  like: (commentId: string) => api.post(`/comments/${commentId}/like`),
+    api.post<Comment>('/comments', data),
+  like: (commentId: string) => api.post<LikeCommentResponse>(`/comments/${commentId}/like`),
   delete: (commentId: string) => api.delete(`/comments/${commentId}`),
 };
 
 // Articles API (Toom-Mag)
 export const articlesApi = {
   getAll: (params?: { category?: string; featured?: boolean }) =>
-    api.get('/articles', { params }),
-  getById: (id: string) => api.get(`/articles/${id}`),
+    api.get<Article[]>('/articles', { params }),
+  getById: (id: string) => api.get<Article>(`/articles/${id}`),
 };
 
 // Password Reset API
@@ -172,62 +205,6 @@ export const passwordApi = {
     api.post(`/auth/verify-reset-code?email=${email}&code=${code}`),
   resetPassword: (email: string, code: string, new_password: string) =>
     api.post(`/auth/reset-password?email=${email}&code=${code}&new_password=${new_password}`),
-};
-
-// Admin API
-export const adminApi = {
-  login: (email: string, password: string) =>
-    api.post('/admin/login', { email, password }),
-  getStats: () => api.get('/admin/stats'),
-  
-  // Users
-  getUsers: (params?: { skip?: number; limit?: number; search?: string }) =>
-    api.get('/admin/users', { params }),
-  deleteUser: (id: string) => api.delete(`/admin/users/${id}`),
-  updateUserSubscription: (userId: string, plan: string) =>
-    api.put(`/admin/users/${userId}/subscription`, null, { params: { plan } }),
-  
-  // Webtoons
-  createWebtoon: (data: any) => api.post('/admin/webtoons', data),
-  updateWebtoon: (id: string, data: any) => api.put(`/admin/webtoons/${id}`, data),
-  deleteWebtoon: (id: string) => api.delete(`/admin/webtoons/${id}`),
-  updateWebtoonCover: (id: string, cover_image: string) =>
-    api.put(`/admin/webtoons/${id}/cover`, { cover_image }),
-  
-  // Episodes
-  createEpisode: (data: any) => api.post('/admin/episodes', data),
-  updateEpisode: (id: string, data: any) => api.put(`/admin/episodes/${id}`, data),
-  deleteEpisode: (id: string) => api.delete(`/admin/episodes/${id}`),
-  updateEpisodePages: (id: string, pages: string[]) =>
-    api.put(`/admin/episodes/${id}/pages`, { pages }),
-  addEpisodePage: (id: string, page_image: string) =>
-    api.post(`/admin/episodes/${id}/pages/add`, { page_image }),
-  
-  // Articles
-  createArticle: (data: any) => api.post('/admin/articles', data),
-  updateArticle: (id: string, data: any) => api.put(`/admin/articles/${id}`, data),
-  deleteArticle: (id: string) => api.delete(`/admin/articles/${id}`),
-  
-  // Subscriptions
-  getSubscriptions: (params?: { skip?: number; limit?: number; status?: string }) =>
-    api.get('/admin/subscriptions', { params }),
-  
-  // Subscription Plans Management
-  getSubscriptionPlans: () => api.get('/admin/subscription-plans'),
-  createSubscriptionPlan: (data: any) => api.post('/admin/subscription-plans', data),
-  updateSubscriptionPlan: (id: string, data: any) => api.put(`/admin/subscription-plans/${id}`, data),
-  deleteSubscriptionPlan: (id: string) => api.delete(`/admin/subscription-plans/${id}`),
-  
-  // Payments
-  getPayments: (params?: { skip?: number; limit?: number; status?: string }) =>
-    api.get('/admin/payments', { params }),
-  refundPayment: (paymentIntentId: string, amount?: number) =>
-    api.post(`/payments/${paymentIntentId}/refund`, { amount }),
-};
-
-// Seed API
-export const seedApi = {
-  seed: () => api.post('/seed'),
 };
 
 export default api;

@@ -220,6 +220,9 @@ uvicorn server:app --host 0.0.0.0 --port 8001 --reload
 
 # Vérifier l'état
 curl http://localhost:8001/api/health
+
+# Lancer les tests (base MongoDB en mémoire, aucune base réelle requise)
+pytest -v
 ```
 
 ### Admin Panel

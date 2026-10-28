@@ -15,6 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../src/constants/colors';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { passwordApi } from '../src/services/api';
+import { getErrorMessage } from '../src/utils/errors';
 import { LoadingSpinner } from '../src/components/LoadingSpinner';
 
 export default function ForgotPasswordScreen() {
@@ -27,7 +28,6 @@ export default function ForgotPasswordScreen() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [demoCode, setDemoCode] = useState('');
 
   const handleSendCode = async () => {
     if (!email) {
@@ -37,14 +37,11 @@ export default function ForgotPasswordScreen() {
 
     setLoading(true);
     try {
-      const response = await passwordApi.forgotPassword(email);
-      if (response.data.demo_code) {
-        setDemoCode(response.data.demo_code);
-      }
+      await passwordApi.forgotPassword(email);
       Alert.alert('Succès', 'Un code de réinitialisation a été envoyé');
       setStep(2);
-    } catch (error: any) {
-      Alert.alert('Erreur', error.response?.data?.detail || 'Une erreur est survenue');
+    } catch (error) {
+      Alert.alert('Erreur', getErrorMessage(error, 'Une erreur est survenue'));
     } finally {
       setLoading(false);
     }
@@ -60,8 +57,8 @@ export default function ForgotPasswordScreen() {
     try {
       await passwordApi.verifyCode(email, code);
       setStep(3);
-    } catch (error: any) {
-      Alert.alert('Erreur', error.response?.data?.detail || 'Code invalide');
+    } catch (error) {
+      Alert.alert('Erreur', getErrorMessage(error, 'Code invalide'));
     } finally {
       setLoading(false);
     }
@@ -83,8 +80,8 @@ export default function ForgotPasswordScreen() {
       Alert.alert('Succès', 'Votre mot de passe a été réinitialisé', [
         { text: 'OK', onPress: () => router.replace('/auth') },
       ]);
-    } catch (error: any) {
-      Alert.alert('Erreur', error.response?.data?.detail || 'Une erreur est survenue');
+    } catch (error) {
+      Alert.alert('Erreur', getErrorMessage(error, 'Une erreur est survenue'));
     } finally {
       setLoading(false);
     }
@@ -160,15 +157,6 @@ export default function ForgotPasswordScreen() {
         {/* Step 2: Code */}
         {step === 2 && (
           <View style={styles.form}>
-            {demoCode && (
-              <View style={styles.demoCodeBox}>
-                <Ionicons name="information-circle" size={20} color={Colors.warning} />
-                <Text style={styles.demoCodeText}>
-                  Mode démo - Code: {demoCode}
-                </Text>
-              </View>
-            )}
-
             <View style={styles.inputContainer}>
               <Ionicons name="keypad-outline" size={20} color={Colors.textMuted} />
               <TextInput
@@ -264,6 +252,4 @@ const styles = StyleSheet.create({
   buttonText: { color: Colors.white, fontSize: 16, fontWeight: '600' },
   linkButton: { alignItems: 'center', padding: 12 },
   linkText: { color: Colors.primary, fontSize: 14 },
-  demoCodeBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255, 193, 7, 0.1)', padding: 12, borderRadius: 10, gap: 10 },
-  demoCodeText: { color: Colors.warning, fontSize: 13, flex: 1 },
 });

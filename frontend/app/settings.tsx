@@ -6,8 +6,6 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
-  Modal,
-  TextInput,
   Switch,
 } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -15,39 +13,23 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../src/constants/colors';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '../src/store/authStore';
-import { historyApi } from '../src/services/api';
-import { LoadingSpinner } from '../src/components/LoadingSpinner';
+import { SettingItem } from '../src/components/SettingItem';
+import { ProfileModal } from '../src/components/settings/ProfileModal';
+import { PasswordModal } from '../src/components/settings/PasswordModal';
+import { HistoryModal } from '../src/components/settings/HistoryModal';
 
 export default function SettingsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { isAuthenticated, isAdmin, user, logout, updateProfile, changePassword, deleteAccount, error, clearError } = useAuthStore();
-  
+  const { isAuthenticated, user, logout, updateProfile, deleteAccount } = useAuthStore();
+
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
-  const [history, setHistory] = useState<any[]>([]);
-  const [historyLoading, setHistoryLoading] = useState(false);
-  
-  const [profileData, setProfileData] = useState({
-    username: user?.username || '',
-    email: user?.email || '',
-  });
-  
-  const [passwordData, setPasswordData] = useState({
-    currentPassword: '',
-    newPassword: '',
-    confirmPassword: '',
-  });
-  
   const [notifications, setNotifications] = useState(user?.notifications_enabled !== false);
 
   useEffect(() => {
     if (user) {
-      setProfileData({
-        username: user.username,
-        email: user.email,
-      });
       setNotifications(user.notifications_enabled !== false);
     }
   }, [user]);
@@ -68,47 +50,6 @@ export default function SettingsScreen() {
         },
       ]
     );
-  };
-
-  const handleUpdateProfile = async () => {
-    if (!profileData.username || !profileData.email) {
-      Alert.alert('Erreur', 'Veuillez remplir tous les champs');
-      return;
-    }
-    
-    const success = await updateProfile(profileData);
-    if (success) {
-      Alert.alert('Succès', 'Profil mis à jour');
-      setShowProfileModal(false);
-    } else {
-      Alert.alert('Erreur', error || 'Une erreur est survenue');
-      clearError();
-    }
-  };
-
-  const handleChangePassword = async () => {
-    if (!passwordData.currentPassword || !passwordData.newPassword) {
-      Alert.alert('Erreur', 'Veuillez remplir tous les champs');
-      return;
-    }
-    if (passwordData.newPassword !== passwordData.confirmPassword) {
-      Alert.alert('Erreur', 'Les mots de passe ne correspondent pas');
-      return;
-    }
-    if (passwordData.newPassword.length < 6) {
-      Alert.alert('Erreur', 'Le mot de passe doit contenir au moins 6 caractères');
-      return;
-    }
-    
-    const success = await changePassword(passwordData.currentPassword, passwordData.newPassword);
-    if (success) {
-      Alert.alert('Succès', 'Mot de passe modifié');
-      setShowPasswordModal(false);
-      setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
-    } else {
-      Alert.alert('Erreur', error || 'Mot de passe actuel incorrect');
-      clearError();
-    }
   };
 
   const handleToggleNotifications = async (value: boolean) => {
@@ -151,87 +92,6 @@ export default function SettingsScreen() {
     );
   };
 
-  const loadHistory = async () => {
-    setHistoryLoading(true);
-    try {
-      const response = await historyApi.get();
-      setHistory(response.data);
-    } catch (error) {
-      console.log('Error loading history:', error);
-    } finally {
-      setHistoryLoading(false);
-    }
-  };
-
-  const clearHistory = async () => {
-    Alert.alert(
-      'Effacer l\'historique',
-      'Voulez-vous vraiment effacer tout l\'historique de lecture?',
-      [
-        { text: 'Annuler', style: 'cancel' },
-        {
-          text: 'Effacer',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await historyApi.clear();
-              setHistory([]);
-              Alert.alert('Succès', 'Historique effacé');
-            } catch (error) {
-              Alert.alert('Erreur', 'Impossible d\'effacer l\'historique');
-            }
-          },
-        },
-      ]
-    );
-  };
-
-  const openHistoryModal = () => {
-    setShowHistoryModal(true);
-    loadHistory();
-  };
-
-  const SettingItem = ({
-    icon,
-    title,
-    subtitle,
-    onPress,
-    showArrow = true,
-    danger = false,
-    rightComponent,
-  }: {
-    icon: string;
-    title: string;
-    subtitle?: string;
-    onPress?: () => void;
-    showArrow?: boolean;
-    danger?: boolean;
-    rightComponent?: React.ReactNode;
-  }) => (
-    <TouchableOpacity
-      style={styles.settingItem}
-      onPress={onPress}
-      disabled={!onPress && !rightComponent}
-    >
-      <View style={[styles.settingIcon, danger && styles.settingIconDanger]}>
-        <Ionicons
-          name={icon as any}
-          size={22}
-          color={danger ? Colors.error : Colors.primary}
-        />
-      </View>
-      <View style={styles.settingInfo}>
-        <Text style={[styles.settingTitle, danger && styles.settingTitleDanger]}>
-          {title}
-        </Text>
-        {subtitle && <Text style={styles.settingSubtitle}>{subtitle}</Text>}
-      </View>
-      {rightComponent || (showArrow && onPress && (
-        <Ionicons name="chevron-forward" size={20} color={Colors.textMuted} />
-      ))}
-    </TouchableOpacity>
-  );
-
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* Header */}
@@ -262,7 +122,7 @@ export default function SettingsScreen() {
                 </View>
               )}
             </View>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.editProfileButton}
               onPress={() => setShowProfileModal(true)}
             >
@@ -282,29 +142,6 @@ export default function SettingsScreen() {
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={24} color={Colors.textMuted} />
-          </TouchableOpacity>
-        )}
-
-        {/* Admin Access */}
-        {isAdmin ? (
-          <TouchableOpacity
-            style={styles.adminBanner}
-            onPress={() => router.push('/admin/dashboard')}
-          >
-            <Ionicons name="shield-checkmark" size={24} color={Colors.gold} />
-            <View style={{ flex: 1, marginLeft: 12 }}>
-              <Text style={styles.adminBannerTitle}>Administration</Text>
-              <Text style={styles.adminBannerSubtitle}>Accéder au tableau de bord</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color={Colors.gold} />
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity
-            style={styles.adminLink}
-            onPress={() => router.push('/admin')}
-          >
-            <Ionicons name="shield-outline" size={18} color={Colors.textMuted} />
-            <Text style={styles.adminLinkText}>Accès administrateur</Text>
           </TouchableOpacity>
         )}
 
@@ -334,7 +171,7 @@ export default function SettingsScreen() {
               icon="time-outline"
               title="Historique de lecture"
               subtitle="Voir vos lectures récentes"
-              onPress={openHistoryModal}
+              onPress={() => setShowHistoryModal(true)}
             />
           </View>
         )}
@@ -383,7 +220,7 @@ export default function SettingsScreen() {
           <SettingItem
             icon="help-circle-outline"
             title="Aide & FAQ"
-            onPress={() => Alert.alert('Aide', 'Centre d\'aide à venir')}
+            onPress={() => Alert.alert('Aide', "Centre d'aide à venir")}
           />
           <SettingItem
             icon="mail-outline"
@@ -393,7 +230,7 @@ export default function SettingsScreen() {
           <SettingItem
             icon="document-text-outline"
             title="Conditions d'utilisation"
-            onPress={() => Alert.alert('CGU', 'Conditions d\'utilisation à venir')}
+            onPress={() => Alert.alert('CGU', "Conditions d'utilisation à venir")}
           />
           <SettingItem
             icon="shield-outline"
@@ -430,143 +267,9 @@ export default function SettingsScreen() {
         <View style={{ height: insets.bottom + 20 }} />
       </ScrollView>
 
-      {/* Profile Modal */}
-      <Modal visible={showProfileModal} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { paddingBottom: insets.bottom + 20 }]}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Modifier le profil</Text>
-              <TouchableOpacity onPress={() => setShowProfileModal(false)}>
-                <Ionicons name="close" size={24} color={Colors.text} />
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.label}>Nom d'utilisateur</Text>
-            <TextInput
-              style={styles.input}
-              value={profileData.username}
-              onChangeText={(text) => setProfileData({ ...profileData, username: text })}
-              placeholder="Votre nom"
-              placeholderTextColor={Colors.textMuted}
-            />
-
-            <Text style={styles.label}>Email</Text>
-            <TextInput
-              style={styles.input}
-              value={profileData.email}
-              onChangeText={(text) => setProfileData({ ...profileData, email: text })}
-              placeholder="votre@email.com"
-              placeholderTextColor={Colors.textMuted}
-              keyboardType="email-address"
-              autoCapitalize="none"
-            />
-
-            <TouchableOpacity style={styles.saveButton} onPress={handleUpdateProfile}>
-              <Text style={styles.saveButtonText}>Enregistrer</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Password Modal */}
-      <Modal visible={showPasswordModal} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { paddingBottom: insets.bottom + 20 }]}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Changer le mot de passe</Text>
-              <TouchableOpacity onPress={() => setShowPasswordModal(false)}>
-                <Ionicons name="close" size={24} color={Colors.text} />
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.label}>Mot de passe actuel</Text>
-            <TextInput
-              style={styles.input}
-              value={passwordData.currentPassword}
-              onChangeText={(text) => setPasswordData({ ...passwordData, currentPassword: text })}
-              placeholder="••••••••"
-              placeholderTextColor={Colors.textMuted}
-              secureTextEntry
-            />
-
-            <Text style={styles.label}>Nouveau mot de passe</Text>
-            <TextInput
-              style={styles.input}
-              value={passwordData.newPassword}
-              onChangeText={(text) => setPasswordData({ ...passwordData, newPassword: text })}
-              placeholder="••••••••"
-              placeholderTextColor={Colors.textMuted}
-              secureTextEntry
-            />
-
-            <Text style={styles.label}>Confirmer le mot de passe</Text>
-            <TextInput
-              style={styles.input}
-              value={passwordData.confirmPassword}
-              onChangeText={(text) => setPasswordData({ ...passwordData, confirmPassword: text })}
-              placeholder="••••••••"
-              placeholderTextColor={Colors.textMuted}
-              secureTextEntry
-            />
-
-            <TouchableOpacity style={styles.saveButton} onPress={handleChangePassword}>
-              <Text style={styles.saveButtonText}>Changer le mot de passe</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* History Modal */}
-      <Modal visible={showHistoryModal} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { paddingBottom: insets.bottom + 20, maxHeight: '80%' }]}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Historique de lecture</Text>
-              <TouchableOpacity onPress={() => setShowHistoryModal(false)}>
-                <Ionicons name="close" size={24} color={Colors.text} />
-              </TouchableOpacity>
-            </View>
-
-            {historyLoading ? (
-              <LoadingSpinner text="Chargement..." />
-            ) : history.length === 0 ? (
-              <View style={styles.emptyHistory}>
-                <Ionicons name="time-outline" size={50} color={Colors.textMuted} />
-                <Text style={styles.emptyHistoryText}>Aucun historique</Text>
-              </View>
-            ) : (
-              <ScrollView showsVerticalScrollIndicator={false}>
-                {history.map((item: any) => (
-                  <TouchableOpacity
-                    key={item.id}
-                    style={styles.historyItem}
-                    onPress={() => {
-                      setShowHistoryModal(false);
-                      router.push(`/webtoon/${item.webtoon_id}`);
-                    }}
-                  >
-                    <View style={styles.historyImage}>
-                      <Ionicons name="book" size={20} color={Colors.primary} />
-                    </View>
-                    <View style={styles.historyInfo}>
-                      <Text style={styles.historyTitle}>{item.webtoon_title}</Text>
-                      <Text style={styles.historyEpisode}>
-                        Épisode {item.episode_number} • Page {item.last_page + 1}
-                      </Text>
-                    </View>
-                    <Ionicons name="chevron-forward" size={18} color={Colors.textMuted} />
-                  </TouchableOpacity>
-                ))}
-                
-                <TouchableOpacity style={styles.clearHistoryButton} onPress={clearHistory}>
-                  <Ionicons name="trash-outline" size={18} color={Colors.error} />
-                  <Text style={styles.clearHistoryText}>Effacer l'historique</Text>
-                </TouchableOpacity>
-              </ScrollView>
-            )}
-          </View>
-        </View>
-      </Modal>
+      <ProfileModal visible={showProfileModal} onClose={() => setShowProfileModal(false)} />
+      <PasswordModal visible={showPasswordModal} onClose={() => setShowPasswordModal(false)} />
+      <HistoryModal visible={showHistoryModal} onClose={() => setShowHistoryModal(false)} />
     </View>
   );
 }
@@ -682,39 +385,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginTop: 2,
   },
-  adminBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 215, 0, 0.1)',
-    marginHorizontal: 16,
-    marginBottom: 16,
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Colors.gold,
-  },
-  adminBannerTitle: {
-    color: Colors.gold,
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  adminBannerSubtitle: {
-    color: Colors.textSecondary,
-    fontSize: 13,
-  },
-  adminLink: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginHorizontal: 16,
-    marginBottom: 16,
-    padding: 12,
-    gap: 6,
-  },
-  adminLinkText: {
-    color: Colors.textMuted,
-    fontSize: 13,
-  },
   settingsGroup: {
     backgroundColor: Colors.surface,
     marginHorizontal: 16,
@@ -731,40 +401,6 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     paddingBottom: 8,
   },
-  settingItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 14,
-    paddingLeft: 16,
-  },
-  settingIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: Colors.surfaceLight,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  settingIconDanger: {
-    backgroundColor: 'rgba(244, 67, 54, 0.1)',
-  },
-  settingInfo: {
-    flex: 1,
-  },
-  settingTitle: {
-    color: Colors.text,
-    fontSize: 15,
-    fontWeight: '500',
-  },
-  settingTitleDanger: {
-    color: Colors.error,
-  },
-  settingSubtitle: {
-    color: Colors.textMuted,
-    fontSize: 13,
-    marginTop: 2,
-  },
   versionContainer: {
     alignItems: 'center',
     paddingVertical: 20,
@@ -777,104 +413,5 @@ const styles = StyleSheet.create({
     color: Colors.textMuted,
     fontSize: 12,
     marginTop: 4,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: Colors.background,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 20,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  modalTitle: {
-    color: Colors.text,
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-  label: {
-    color: Colors.textSecondary,
-    fontSize: 14,
-    marginBottom: 8,
-    marginTop: 16,
-  },
-  input: {
-    backgroundColor: Colors.surface,
-    borderRadius: 12,
-    padding: 14,
-    color: Colors.text,
-    fontSize: 16,
-  },
-  saveButton: {
-    backgroundColor: Colors.primary,
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginTop: 24,
-  },
-  saveButtonText: {
-    color: Colors.white,
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  emptyHistory: {
-    alignItems: 'center',
-    paddingVertical: 40,
-  },
-  emptyHistoryText: {
-    color: Colors.textMuted,
-    fontSize: 16,
-    marginTop: 12,
-  },
-  historyItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.surface,
-    padding: 12,
-    borderRadius: 10,
-    marginBottom: 10,
-  },
-  historyImage: {
-    width: 44,
-    height: 44,
-    borderRadius: 8,
-    backgroundColor: Colors.surfaceLight,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  historyInfo: {
-    flex: 1,
-  },
-  historyTitle: {
-    color: Colors.text,
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  historyEpisode: {
-    color: Colors.textMuted,
-    fontSize: 12,
-    marginTop: 2,
-  },
-  clearHistoryButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 14,
-    marginTop: 10,
-    gap: 8,
-  },
-  clearHistoryText: {
-    color: Colors.error,
-    fontSize: 14,
-    fontWeight: '500',
   },
 });
