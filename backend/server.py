@@ -75,6 +75,7 @@ if not ALLOWED_ORIGINS or ALLOWED_ORIGINS == ['']:
         "https://african-webtoons.preview.emergentagent.com",
         "http://localhost:3000",
         "http://localhost:8001",
+        "http://localhost:8081",
     ]
 
 app.add_middleware(
@@ -82,7 +83,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_origins=ALLOWED_ORIGINS,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type"],
+    allow_headers=["Authorization", "Content-Type", "Cache-Control", "Pragma", "Expires"],
 )
 
 
