@@ -3,10 +3,10 @@ import hmac
 from datetime import datetime, timedelta
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 import config
-from auth_utils import create_token, hash_password, require_admin, verify_and_migrate_password
+from auth_utils import hash_password, issue_tokens, require_admin, verify_and_migrate_password
 from models import Article, Episode, User, UserLogin, Webtoon
 from routers.payments import get_plan_by_id
 
@@ -16,7 +16,8 @@ router = APIRouter()
 # ==================== ADMIN AUTH ====================
 
 @router.post("/admin/login")
-async def admin_login(credentials: UserLogin):
+@config.limiter.limit("10/minute")
+async def admin_login(request: Request, credentials: UserLogin):
     """Special admin login endpoint"""
     # Check for default admin (constant-time comparison to avoid timing attacks)
     if credentials.email == config.ADMIN_EMAIL and hmac.compare_digest(credentials.password, config.ADMIN_PASSWORD):
@@ -33,13 +34,14 @@ async def admin_login(credentials: UserLogin):
             await config.db.users.insert_one(admin_dict)
             admin = admin_dict
 
-        token = create_token(admin["id"], admin["email"], True)
+        token, refresh_token = await issue_tokens(admin["id"], admin["email"], True)
         return {
             "id": admin["id"],
             "email": admin["email"],
             "username": admin.get("username", "Admin"),
             "is_admin": True,
-            "token": token
+            "token": token,
+            "refresh_token": refresh_token
         }
 
     # Check database for admin user
@@ -47,13 +49,14 @@ async def admin_login(credentials: UserLogin):
     if not user or not await verify_and_migrate_password(credentials.password, user):
         raise HTTPException(status_code=401, detail="Identifiants administrateur invalides")
 
-    token = create_token(user["id"], user["email"], True)
+    token, refresh_token = await issue_tokens(user["id"], user["email"], True)
     return {
         "id": user["id"],
         "email": user["email"],
         "username": user["username"],
         "is_admin": True,
-        "token": token
+        "token": token,
+        "refresh_token": refresh_token
     }
 
 

@@ -4,6 +4,8 @@ logic lives in `routers/*`, `models.py`, `auth_utils.py` and `config.py`.
 """
 from fastapi import APIRouter, FastAPI, HTTPException
 from fastapi.responses import FileResponse
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 from starlette.middleware.cors import CORSMiddleware
 import os
 from datetime import datetime
@@ -13,6 +15,8 @@ from routers import admin, auth, content, payments, webtoons
 
 # Create the main app without a prefix
 app = FastAPI(title="ToomToon API")
+app.state.limiter = config.limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Create a router with the /api prefix and mount every feature router onto it
 api_router = APIRouter(prefix="/api")

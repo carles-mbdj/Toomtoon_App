@@ -20,6 +20,12 @@ PyJWT==2.11.0
 passlib==1.7.4
 bcrypt==4.0.1
 
+# Rate limiting
+slowapi==0.1.10
+limits==5.8.0
+deprecated==3.0.0
+wrapt==2.5.1
+
 # Payments
 stripe==14.3.0
 

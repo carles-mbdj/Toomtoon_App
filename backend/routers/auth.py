@@ -2,25 +2,29 @@
 import secrets
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 import config
 from auth_utils import (
-    create_token,
     get_current_user,
     hash_password,
+    issue_tokens,
     password_reset_tokens,
+    revoke_refresh_token,
+    rotate_refresh_token,
     verify_and_migrate_password,
 )
 from models import (
     PasswordChange,
     PasswordResetRequest,
+    RefreshTokenRequest,
     User,
     UserCreate,
     UserLogin,
     UserResponse,
     UserUpdate,
 )
+from stripe_checkout import cancel_subscription
 
 router = APIRouter()
 
@@ -28,7 +32,8 @@ router = APIRouter()
 # ==================== AUTH ROUTES ====================
 
 @router.post("/auth/register", response_model=UserResponse)
-async def register(user_data: UserCreate):
+@config.limiter.limit("5/minute")
+async def register(request: Request, user_data: UserCreate):
     # Check if email exists
     existing = await config.db.users.find_one({"email": user_data.email})
     if existing:
@@ -44,21 +49,23 @@ async def register(user_data: UserCreate):
 
     await config.db.users.insert_one(user_dict)
 
-    token = create_token(user.id, user.email)
+    token, refresh_token = await issue_tokens(user.id, user.email)
     return UserResponse(
         id=user.id,
         email=user.email,
         username=user.username,
-        token=token
+        token=token,
+        refresh_token=refresh_token
     )
 
 @router.post("/auth/login", response_model=UserResponse)
-async def login(credentials: UserLogin):
+@config.limiter.limit("10/minute")
+async def login(request: Request, credentials: UserLogin):
     user = await config.db.users.find_one({"email": credentials.email})
     if not user or not await verify_and_migrate_password(credentials.password, user):
         raise HTTPException(status_code=401, detail="Email ou mot de passe incorrect")
 
-    token = create_token(user["id"], user["email"], user.get("is_admin", False))
+    token, refresh_token = await issue_tokens(user["id"], user["email"], user.get("is_admin", False))
     return UserResponse(
         id=user["id"],
         email=user["email"],
@@ -68,7 +75,8 @@ async def login(credentials: UserLogin):
         subscription_end=user.get("subscription_end"),
         notifications_enabled=user.get("notifications_enabled", True),
         language=user.get("language", "fr"),
-        token=token
+        token=token,
+        refresh_token=refresh_token
     )
 
 @router.get("/auth/me", response_model=UserResponse)
@@ -86,13 +94,29 @@ async def get_me(current_user: User = Depends(get_current_user)):
         language=current_user.language
     )
 
+@router.post("/auth/refresh")
+async def refresh_access_token(body: RefreshTokenRequest):
+    """Exchange a still-valid refresh token for a new access+refresh pair."""
+    result = await rotate_refresh_token(body.refresh_token)
+    if not result:
+        raise HTTPException(status_code=401, detail="Refresh token invalide ou expiré")
+    access_token, refresh_token = result
+    return {"token": access_token, "refresh_token": refresh_token}
+
+@router.post("/auth/logout")
+async def logout(body: RefreshTokenRequest):
+    """Revoke a refresh token so it can no longer be used to mint new access tokens."""
+    await revoke_refresh_token(body.refresh_token)
+    return {"success": True}
+
 
 # ==================== PASSWORD RESET ROUTES ====================
 
 @router.post("/auth/forgot-password")
-async def forgot_password(request: PasswordResetRequest):
+@config.limiter.limit("3/minute")
+async def forgot_password(request: Request, reset_request: PasswordResetRequest):
     """Request password reset - generates a reset token"""
-    user = await config.db.users.find_one({"email": request.email})
+    user = await config.db.users.find_one({"email": reset_request.email})
     if not user:
         # Don't reveal if email exists
         return {"success": True, "message": "Si l'email existe, un code de réinitialisation a été envoyé"}
@@ -101,7 +125,7 @@ async def forgot_password(request: PasswordResetRequest):
     reset_code = ''.join(secrets.choice("0123456789") for _ in range(6))
 
     # Store token with expiration (15 minutes)
-    password_reset_tokens[request.email] = {
+    password_reset_tokens[reset_request.email] = {
         "code": reset_code,
         "expires": datetime.utcnow() + timedelta(minutes=15)
     }
@@ -109,7 +133,7 @@ async def forgot_password(request: PasswordResetRequest):
     # TODO: send the code by email once an email service is integrated.
     # Until then it is only logged server-side - it must never be returned
     # in the API response, as that would let anyone reset any account.
-    config.logger.info(f"Password reset code for {request.email}: {reset_code}")
+    config.logger.info(f"Password reset code for {reset_request.email}: {reset_code}")
 
     return {
         "success": True,
@@ -203,6 +227,16 @@ async def change_password(
 async def delete_account(current_user: User = Depends(get_current_user)):
     if not current_user:
         raise HTTPException(status_code=401, detail="Non authentifié")
+
+    # Cancel any active Stripe subscription first, so the user isn't billed
+    # after their account no longer exists. Absence of a subscription (or a
+    # transient Stripe error) must not block the account deletion itself.
+    try:
+        await cancel_subscription(config.db, current_user.id, immediately=True)
+    except ValueError:
+        pass
+    except Exception as e:
+        config.logger.error(f"Failed to cancel Stripe subscription for user {current_user.id} on account deletion: {e}")
 
     # Delete user data
     await config.db.reading_history.delete_many({"user_id": current_user.id})

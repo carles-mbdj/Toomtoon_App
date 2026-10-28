@@ -6,6 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Modal,
+  Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -13,18 +14,47 @@ import { Colors } from '../../src/constants/colors';
 import { Header } from '../../src/components/Header';
 import { LoadingSpinner } from '../../src/components/LoadingSpinner';
 import { useAuthStore } from '../../src/store/authStore';
+import { checkoutApi } from '../../src/services/api';
+import { getErrorMessage } from '../../src/utils/errors';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSubscriptionPlans } from '../../src/hooks/queries';
 
 export default function SubscriptionScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated, user, refreshUser } = useAuthStore();
   const plansQuery = useSubscriptionPlans();
   const plans = plansQuery.data ?? [];
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showSelectPlanModal, setShowSelectPlanModal] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+
+  const handleCancelSubscription = () => {
+    Alert.alert(
+      'Annuler mon abonnement',
+      "Votre abonnement restera actif jusqu'à la fin de la période déjà payée, puis ne sera pas renouvelé. Continuer ?",
+      [
+        { text: 'Non', style: 'cancel' },
+        {
+          text: 'Oui, annuler',
+          style: 'destructive',
+          onPress: async () => {
+            setCancelling(true);
+            try {
+              await checkoutApi.cancelSubscription(false);
+              await refreshUser();
+              Alert.alert('Abonnement annulé', "Il ne sera pas renouvelé à son expiration.");
+            } catch (error) {
+              Alert.alert('Erreur', getErrorMessage(error, "Impossible d'annuler l'abonnement pour le moment."));
+            } finally {
+              setCancelling(false);
+            }
+          },
+        },
+      ]
+    );
+  };
 
   useEffect(() => {
     // Auto-select the popular plan once plans have loaded
@@ -91,6 +121,11 @@ export default function SubscriptionScreen() {
                   Expire le: {subscriptionEndDate.toLocaleDateString('fr-FR')}
                 </Text>
               )}
+              <TouchableOpacity onPress={handleCancelSubscription} disabled={cancelling}>
+                <Text style={styles.cancelSubscriptionText}>
+                  {cancelling ? 'Annulation...' : 'Annuler mon abonnement'}
+                </Text>
+              </TouchableOpacity>
             </View>
           </View>
         )}
@@ -318,6 +353,12 @@ const styles = StyleSheet.create({
   statusText: {
     color: Colors.textSecondary,
     fontSize: 13,
+  },
+  cancelSubscriptionText: {
+    color: Colors.error,
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 8,
   },
   benefits: {
     backgroundColor: Colors.surface,

@@ -45,14 +45,22 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const login = async (email: string, password: string) => {
     const response = await authApi.login(email, password);
-    const { token, ...userData } = response.data;
+    const { token, refresh_token, ...userData } = response.data;
     localStorage.setItem('admin_token', token);
+    localStorage.setItem('admin_refresh_token', refresh_token);
     setToken(token);
     setUser(userData);
   };
 
   const logout = () => {
+    const refreshToken = localStorage.getItem('admin_refresh_token');
+    if (refreshToken) {
+      // Best-effort: revoke server-side so the refresh token can't be used
+      // again, but don't block clearing the local session on it.
+      authApi.logout(refreshToken).catch(() => {});
+    }
     localStorage.removeItem('admin_token');
+    localStorage.removeItem('admin_refresh_token');
     setToken(null);
     setUser(null);
   };

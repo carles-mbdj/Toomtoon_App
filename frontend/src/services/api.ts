@@ -1,5 +1,7 @@
 import axios from 'axios';
-import { getToken } from './tokenStorage';
+import type { InternalAxiosRequestConfig } from 'axios';
+import * as Crypto from 'expo-crypto';
+import { getRefreshToken, getToken, removeRefreshToken, removeToken, setRefreshToken, setToken } from './tokenStorage';
 import type { Article, Comment, Episode, Genre, HistoryEntry, RecentEpisode, SubscriptionPlan, Webtoon } from '../types';
 
 const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
@@ -28,6 +30,72 @@ api.interceptors.request.use(async (config) => {
   return config;
 });
 
+// The authStore registers itself here so a refresh failure (expired/revoked
+// refresh token) can fully log the user out, without api.ts importing the
+// store directly and creating a circular dependency.
+let onAuthFailure: (() => void) | null = null;
+export function setOnAuthFailure(callback: () => void): void {
+  onAuthFailure = callback;
+}
+
+// Shared across concurrent 401s so a burst of requests triggers exactly one
+// refresh call instead of each racing to consume (and rotate out) the same
+// refresh token.
+let refreshPromise: Promise<string | null> | null = null;
+
+async function refreshAccessToken(): Promise<string | null> {
+  const refreshToken = await getRefreshToken();
+  if (!refreshToken) return null;
+  try {
+    // Plain axios, not `api`, so this call never goes through the
+    // interceptor below and can't trigger itself on failure.
+    const response = await axios.post<{ token: string; refresh_token: string }>(
+      `${API_URL}/api/auth/refresh`,
+      { refresh_token: refreshToken }
+    );
+    await setToken(response.data.token);
+    await setRefreshToken(response.data.refresh_token);
+    return response.data.token;
+  } catch {
+    return null;
+  }
+}
+
+interface RetryableRequestConfig extends InternalAxiosRequestConfig {
+  _retried?: boolean;
+}
+
+// On a 401, transparently refresh the access token once and retry; if the
+// refresh token itself is invalid/expired, clear the session and let the
+// app react (redirect to the auth screen).
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const { response, config } = error;
+    const requestConfig = config as RetryableRequestConfig | undefined;
+    if (!response || !requestConfig || response.status !== 401 || requestConfig._retried) {
+      return Promise.reject(error);
+    }
+
+    requestConfig._retried = true;
+    if (!refreshPromise) {
+      refreshPromise = refreshAccessToken().finally(() => {
+        refreshPromise = null;
+      });
+    }
+    const newToken = await refreshPromise;
+    if (newToken) {
+      requestConfig.headers.Authorization = `Bearer ${newToken}`;
+      return api(requestConfig);
+    }
+
+    await removeToken();
+    await removeRefreshToken();
+    onAuthFailure?.();
+    return Promise.reject(error);
+  }
+);
+
 export interface UserProfile {
   id: string;
   email: string;
@@ -41,6 +109,7 @@ export interface UserProfile {
 
 interface AuthResponse extends UserProfile {
   token: string;
+  refresh_token: string;
 }
 
 // Auth API
@@ -50,6 +119,7 @@ export const authApi = {
   login: (email: string, password: string) =>
     api.post<AuthResponse>('/auth/login', { email, password }),
   getMe: () => api.get<UserProfile>('/auth/me'),
+  logout: (refresh_token: string) => api.post('/auth/logout', { refresh_token }),
 };
 
 // User Settings API
@@ -108,7 +178,7 @@ export const paymentApi = {
   createPaymentIntent: (plan_id: string, currency: string = 'EUR') =>
     api.post('/payments/create-intent', { plan_id, currency }, {
       headers: {
-        'Idempotency-Key': generateUUID(),
+        'Idempotency-Key': Crypto.randomUUID(),
       },
     }),
   
@@ -157,15 +227,6 @@ export const checkoutApi = {
   getCustomerPortal: (return_url?: string) =>
     api.get('/checkout/customer-portal', { params: { return_url } }),
 };
-
-// Helper: Generate UUID for idempotency
-function generateUUID(): string {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-    const r = Math.random() * 16 | 0;
-    const v = c === 'x' ? r : (r & 0x3 | 0x8);
-    return v.toString(16);
-  });
-}
 
 // History API
 export const historyApi = {

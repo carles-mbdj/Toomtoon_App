@@ -1,6 +1,6 @@
 import { create } from 'zustand';
-import { getToken, setToken, removeToken } from '../services/tokenStorage';
-import { authApi, userApi, type UserProfile } from '../services/api';
+import { getRefreshToken, getToken, removeRefreshToken, removeToken, setRefreshToken, setToken } from '../services/tokenStorage';
+import { authApi, setOnAuthFailure, userApi, type UserProfile } from '../services/api';
 import { getErrorMessage } from '../utils/errors';
 
 type User = UserProfile;
@@ -36,9 +36,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       set({ isLoading: true, error: null });
       const response = await authApi.login(email, password);
-      const { token, ...user } = response.data;
-      
+      const { token, refresh_token, ...user } = response.data;
+
       await setToken(token);
+      await setRefreshToken(refresh_token);
       set({ user, token, isAuthenticated: true, isAdmin: user.is_admin || false, isLoading: false });
       return true;
     } catch (error) {
@@ -51,9 +52,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       set({ isLoading: true, error: null });
       const response = await authApi.register(email, password, username);
-      const { token, ...user } = response.data;
-      
+      const { token, refresh_token, ...user } = response.data;
+
       await setToken(token);
+      await setRefreshToken(refresh_token);
       set({ user, token, isAuthenticated: true, isLoading: false });
       return true;
     } catch (error) {
@@ -63,7 +65,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   logout: async () => {
+    const refreshToken = await getRefreshToken();
+    if (refreshToken) {
+      // Best-effort: revoke server-side so the refresh token can't be used
+      // again, but don't block clearing the local session on it.
+      authApi.logout(refreshToken).catch(() => {});
+    }
     await removeToken();
+    await removeRefreshToken();
     set({ user: null, token: null, isAuthenticated: false, isAdmin: false });
   },
 
@@ -121,6 +130,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       set({ isLoading: true, error: null });
       await userApi.deleteAccount();
       await removeToken();
+      await removeRefreshToken();
       set({ user: null, token: null, isAuthenticated: false, isAdmin: false, isLoading: false });
       return true;
     } catch (error) {
@@ -146,3 +156,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 }));
+
+// If the API layer ever fails to refresh an expired access token (its
+// refresh token is itself invalid/expired/revoked), fully log the user out
+// so the UI reflects it instead of silently keeping stale "authenticated" state.
+setOnAuthFailure(() => {
+  useAuthStore.getState().logout();
+});

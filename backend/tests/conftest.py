@@ -22,6 +22,10 @@ async def fresh_db(monkeypatch):
     mock_client = AsyncMongoMockClient()
     mock_db = mock_client["toomtoon_test"]
     monkeypatch.setattr(config, "db", mock_db)
+    # The rate limiter's in-memory storage is process-global, not per-test,
+    # so reset it too or login/register calls in one test could exhaust the
+    # budget for the next one.
+    config.limiter.reset()
     yield mock_db
 
 

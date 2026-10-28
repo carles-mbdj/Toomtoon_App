@@ -38,6 +38,7 @@ class UserResponse(BaseModel):
     notifications_enabled: bool = True
     language: str = "fr"
     token: Optional[str] = None
+    refresh_token: Optional[str] = None
 
 class UserUpdate(BaseModel):
     username: Optional[str] = None
@@ -51,6 +52,9 @@ class PasswordChange(BaseModel):
 
 class PasswordResetRequest(BaseModel):
     email: EmailStr
+
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str
 
 class PasswordReset(BaseModel):
     token: str

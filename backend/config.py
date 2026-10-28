@@ -14,6 +14,8 @@ from dotenv import load_dotenv
 from fastapi.security import HTTPBearer
 from motor.motor_asyncio import AsyncIOMotorClient
 from passlib.context import CryptContext
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 import stripe
 
 ROOT_DIR = Path(__file__).parent
@@ -50,3 +52,6 @@ stripe.api_key = STRIPE_SECRET_KEY
 security = HTTPBearer(auto_error=False)
 
 pwd_context = CryptContext(schemes=["bcrypt", "hex_sha256"], deprecated=["hex_sha256"])
+
+# Rate limiting (keyed by client IP) for brute-force-prone auth endpoints.
+limiter = Limiter(key_func=get_remote_address)

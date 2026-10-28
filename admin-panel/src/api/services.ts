@@ -34,7 +34,8 @@ interface PaymentFilters {
 // Auth
 export const authApi = {
   login: (email: string, password: string) =>
-    api.post<{ id: string; email: string; username: string; is_admin: boolean; token: string }>('/admin/login', { email, password }),
+    api.post<{ id: string; email: string; username: string; is_admin: boolean; token: string; refresh_token: string }>('/admin/login', { email, password }),
+  logout: (refresh_token: string) => api.post('/auth/logout', { refresh_token }),
   getMe: () => api.get<AdminUser>('/auth/me'),
   changePassword: (current_password: string, new_password: string) =>
     api.put<{ success: boolean; message: string }>('/user/password', { current_password, new_password }),
