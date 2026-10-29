@@ -40,7 +40,7 @@ SUBSCRIPTION_PLANS = [
         "popular": False
     },
     {
-        "id": "plan_3_month",
+        "id": "plan_3_months",
         "name": "3 Mois",
         "duration_days": 90,
         "interval": "month",
@@ -59,7 +59,7 @@ SUBSCRIPTION_PLANS = [
         "popular": True
     },
     {
-        "id": "plan_12_month",
+        "id": "plan_12_months",
         "name": "12 Mois",
         "duration_days": 365,
         "interval": "year",

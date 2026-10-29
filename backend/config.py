@@ -47,6 +47,12 @@ STRIPE_PUBLISHABLE_KEY = os.environ.get('STRIPE_PUBLISHABLE_KEY', '')
 STRIPE_SECRET_KEY = os.environ.get('STRIPE_SECRET_KEY', '')
 STRIPE_WEBHOOK_SECRET = os.environ.get('STRIPE_WEBHOOK_SECRET', '')
 
+# RevenueCat (Google Play / Apple App Store subscriptions) - optional:
+# unset in dev/CI, where the webhook simply responds 503 instead of
+# crashing on startup. RevenueCat authenticates its webhook calls with a
+# static bearer token configured in its dashboard, not a signature.
+REVENUECAT_WEBHOOK_SECRET = os.environ.get('REVENUECAT_WEBHOOK_SECRET', '')
+
 # Initialize Stripe
 stripe.api_key = STRIPE_SECRET_KEY
 

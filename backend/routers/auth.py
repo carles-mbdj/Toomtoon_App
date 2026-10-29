@@ -238,6 +238,21 @@ async def delete_account(current_user: User = Depends(get_current_user)):
     except Exception as e:
         config.logger.error(f"Failed to cancel Stripe subscription for user {current_user.id} on account deletion: {e}")
 
+    # Google Play is the merchant of record for a Play-billed subscription,
+    # so it can't be cancelled from here (see CGV Article 5) - flag it so
+    # support can follow up, rather than silently leaving it billing.
+    google_play_sub = await config.db.subscriptions.find_one({
+        "user_id": current_user.id,
+        "subscription_provider": "google_play",
+        "status": "active",
+    })
+    if google_play_sub:
+        config.logger.warning(
+            f"User {current_user.id} deleted their account with an active Google Play "
+            f"subscription that could not be cancelled automatically; they must cancel "
+            f"it from the Play Store themselves."
+        )
+
     # Delete user data
     await config.db.reading_history.delete_many({"user_id": current_user.id})
     await config.db.subscriptions.delete_many({"user_id": current_user.id})

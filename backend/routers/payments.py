@@ -1,5 +1,7 @@
 """Subscription plans, Stripe PaymentIntent flow, Stripe Checkout flow,
-webhooks, and the admin payment/subscription-plan management routes."""
+webhooks, RevenueCat (Google Play) webhooks, and the admin
+payment/subscription-plan management routes."""
+import hmac
 import os
 import uuid
 from datetime import datetime, timedelta
@@ -9,6 +11,7 @@ import stripe
 from fastapi import APIRouter, Body, Depends, Header, HTTPException, Request
 
 import config
+import revenuecat
 from auth_utils import get_current_user, require_admin
 from models import (
     DEFAULT_SUBSCRIPTION_PLANS,
@@ -569,6 +572,19 @@ async def cancel_subscription_endpoint(
         result = await cancel_subscription(config.db, current_user.id, immediately)
         return result
     except ValueError as e:
+        # A Google Play subscription can't be cancelled through this
+        # endpoint - Google is the merchant of record for it, so only
+        # the Play Store app can cancel it (see CGV Article 5).
+        google_play_sub = await config.db.subscriptions.find_one({
+            "user_id": current_user.id,
+            "subscription_provider": "google_play",
+            "status": "active",
+        })
+        if google_play_sub:
+            raise HTTPException(
+                status_code=400,
+                detail="Cet abonnement a été souscrit via Google Play. Annulez-le depuis l'application Play Store (Paiements et abonnements)."
+            )
         raise HTTPException(status_code=400, detail=str(e))
     except stripe.error.StripeError as e:
         raise HTTPException(status_code=400, detail=f"Erreur: {str(e)}")
@@ -689,6 +705,37 @@ async def stripe_checkout_webhook(request: Request):
     except Exception as e:
         config.logger.error(f"Error handling webhook event {event_type}: {str(e)}")
         # Don't raise - return 200 to acknowledge receipt
+
+    return {"received": True}
+
+
+# ==================== REVENUECAT WEBHOOK (GOOGLE PLAY / APPLE) ====================
+
+@router.post("/webhooks/revenuecat")
+async def revenuecat_webhook(request: Request):
+    """Handle RevenueCat webhook events for Google Play (and, later,
+    Apple App Store) subscriptions. Unlike Stripe, RevenueCat authenticates
+    itself with a static bearer token configured in its dashboard, not a
+    cryptographic signature, so REVENUECAT_WEBHOOK_SECRET must match
+    exactly what was entered there."""
+    if not config.REVENUECAT_WEBHOOK_SECRET:
+        config.logger.error("RevenueCat webhook rejected: REVENUECAT_WEBHOOK_SECRET is not configured")
+        raise HTTPException(status_code=503, detail="Webhook not configured")
+
+    auth_header = request.headers.get("authorization", "")
+    expected = f"Bearer {config.REVENUECAT_WEBHOOK_SECRET}"
+    if not hmac.compare_digest(auth_header, expected):
+        config.logger.error("RevenueCat webhook rejected: invalid authorization header")
+        raise HTTPException(status_code=401, detail="Invalid authorization")
+
+    body = await request.json()
+    event = body.get("event", {})
+
+    try:
+        await revenuecat.handle_event(event)
+    except Exception as e:
+        config.logger.error(f"Error handling RevenueCat event {event.get('type')}: {str(e)}")
+        # Don't raise - acknowledge receipt so RevenueCat doesn't retry forever
 
     return {"received": True}
 
