@@ -7,10 +7,12 @@ import {
   TouchableOpacity,
   Modal,
   Alert,
+  Linking,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../src/constants/colors';
+import { LEGAL_URLS } from '../../src/constants/legal';
 import { Header } from '../../src/components/Header';
 import { LoadingSpinner } from '../../src/components/LoadingSpinner';
 import { useAuthStore } from '../../src/store/authStore';
@@ -49,6 +51,7 @@ export default function SubscriptionScreen() {
   const [showSelectPlanModal, setShowSelectPlanModal] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [purchasing, setPurchasing] = useState(false);
+  const [acceptedCGV, setAcceptedCGV] = useState(false);
 
   const plans: DisplayPlan[] = useMemo(() => {
     if (onAndroidBilling) {
@@ -118,6 +121,10 @@ export default function SubscriptionScreen() {
     }
 
     if (onAndroidBilling) {
+      if (!acceptedCGV) {
+        Alert.alert('CGV requises', "Veuillez accepter les CGV pour continuer.");
+        return;
+      }
       const pkg = offeringQuery.data?.availablePackages.find((p) => p.product.identifier === selectedPlan);
       if (!pkg) {
         Alert.alert('Indisponible', "Ce plan n'est pas disponible pour le moment.");
@@ -290,6 +297,27 @@ export default function SubscriptionScreen() {
             Vos données sont protégées par chiffrement SSL
           </Text>
         </View>
+
+        {onAndroidBilling && (
+          <TouchableOpacity
+            style={styles.consentRow}
+            onPress={() => setAcceptedCGV(!acceptedCGV)}
+            disabled={purchasing}
+          >
+            <Ionicons
+              name={acceptedCGV ? 'checkbox' : 'square-outline'}
+              size={22}
+              color={acceptedCGV ? Colors.primary : Colors.textMuted}
+            />
+            <Text style={styles.consentText}>
+              J'accepte les{' '}
+              <Text style={styles.consentLink} onPress={() => Linking.openURL(LEGAL_URLS.cgv)}>
+                CGV
+              </Text>
+              {' '}et je demande l'exécution immédiate de mon abonnement, renonçant à mon droit de rétractation de 14 jours.
+            </Text>
+          </TouchableOpacity>
+        )}
       </ScrollView>
 
       {/* Bottom Button */}
@@ -297,10 +325,10 @@ export default function SubscriptionScreen() {
         <TouchableOpacity
           style={[
             styles.subscribeButton,
-            (!selectedPlan || purchasing) && styles.subscribeButtonDisabled,
+            (!selectedPlan || purchasing || (onAndroidBilling && !acceptedCGV)) && styles.subscribeButtonDisabled,
           ]}
           onPress={handleContinue}
-          disabled={!selectedPlan || purchasing}
+          disabled={!selectedPlan || purchasing || (onAndroidBilling && !acceptedCGV)}
         >
           <Ionicons name="card" size={24} color={Colors.white} />
           <Text style={styles.subscribeButtonText}>
@@ -533,6 +561,23 @@ const styles = StyleSheet.create({
   securityText: {
     color: Colors.textMuted,
     fontSize: 12,
+  },
+  consentRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    marginTop: 16,
+    marginHorizontal: 16,
+  },
+  consentText: {
+    flex: 1,
+    color: Colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  consentLink: {
+    color: Colors.primary,
+    fontWeight: '600',
   },
   bottomBar: {
     position: 'absolute',

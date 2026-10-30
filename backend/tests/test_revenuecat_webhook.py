@@ -2,6 +2,7 @@
 subscription events the same way the Stripe webhook does, but
 authenticated with a static bearer token instead of a signature."""
 import config
+import email_service
 
 
 async def test_webhook_rejected_without_secret(client, monkeypatch):
@@ -45,6 +46,61 @@ async def test_initial_purchase_activates_subscription(client, user_headers, use
 
     user = await fresh_db.users.find_one({"id": user_id})
     assert user["subscription_type"] == "plan_3_months"
+
+
+async def test_initial_purchase_sends_confirmation_email(client, user_token, fresh_db, monkeypatch):
+    import jwt as pyjwt
+
+    monkeypatch.setattr(config, "REVENUECAT_WEBHOOK_SECRET", "test-secret")
+    sent = []
+
+    async def fake_send_email_async(to_email, subject, body_text):
+        sent.append((to_email, subject))
+
+    monkeypatch.setattr(email_service, "send_email_async", fake_send_email_async)
+    payload = pyjwt.decode(user_token, config.JWT_SECRET, algorithms=[config.JWT_ALGORITHM])
+    user_id = payload["user_id"]
+
+    response = await client.post(
+        "/api/webhooks/revenuecat",
+        json={"event": {
+            "type": "INITIAL_PURCHASE",
+            "app_user_id": user_id,
+            "product_id": "plan_1_month",
+            "expiration_at_ms": 4102444800000,
+        }},
+        headers={"Authorization": "Bearer test-secret"},
+    )
+    assert response.status_code == 200, response.text
+    assert len(sent) == 1
+    assert sent[0][0] == "reader@example.com"
+
+
+async def test_renewal_does_not_resend_confirmation_email(client, user_token, fresh_db, monkeypatch):
+    import jwt as pyjwt
+
+    monkeypatch.setattr(config, "REVENUECAT_WEBHOOK_SECRET", "test-secret")
+    sent = []
+
+    async def fake_send_email_async(to_email, subject, body_text):
+        sent.append((to_email, subject))
+
+    monkeypatch.setattr(email_service, "send_email_async", fake_send_email_async)
+    payload = pyjwt.decode(user_token, config.JWT_SECRET, algorithms=[config.JWT_ALGORITHM])
+    user_id = payload["user_id"]
+
+    response = await client.post(
+        "/api/webhooks/revenuecat",
+        json={"event": {
+            "type": "RENEWAL",
+            "app_user_id": user_id,
+            "product_id": "plan_1_month",
+            "expiration_at_ms": 4102444800000,
+        }},
+        headers={"Authorization": "Bearer test-secret"},
+    )
+    assert response.status_code == 200, response.text
+    assert sent == []
 
     sub = await fresh_db.subscriptions.find_one({"user_id": user_id, "subscription_provider": "google_play"})
     assert sub["status"] == "active"

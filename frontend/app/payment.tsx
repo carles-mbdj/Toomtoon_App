@@ -12,6 +12,7 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../src/constants/colors';
+import { LEGAL_URLS } from '../src/constants/legal';
 import { Header } from '../src/components/Header';
 import { InfoModal } from '../src/components/InfoModal';
 import { CurrencySelector } from '../src/components/payment/CurrencySelector';
@@ -33,6 +34,7 @@ export default function PaymentScreen() {
   const [processing, setProcessing] = useState(false);
   const [selectedPlanId, setSelectedPlanId] = useState(planId || '');
   const [currency, setCurrency] = useState('EUR');
+  const [acceptedCGV, setAcceptedCGV] = useState(false);
 
   // Modal states
   const [showLoginModal, setShowLoginModal] = useState(false);
@@ -84,6 +86,12 @@ export default function PaymentScreen() {
   const handlePayment = async () => {
     if (!plan) {
       setErrorMessage('Veuillez sélectionner un plan');
+      setShowErrorModal(true);
+      return;
+    }
+
+    if (!acceptedCGV) {
+      setErrorMessage('Veuillez accepter les CGV pour continuer');
       setShowErrorModal(true);
       return;
     }
@@ -204,9 +212,28 @@ export default function PaymentScreen() {
         </View>
 
         <TouchableOpacity
-          style={[styles.payButton, processing && styles.payButtonDisabled]}
+          style={styles.consentRow}
+          onPress={() => setAcceptedCGV(!acceptedCGV)}
+          disabled={processing}
+        >
+          <Ionicons
+            name={acceptedCGV ? 'checkbox' : 'square-outline'}
+            size={22}
+            color={acceptedCGV ? Colors.primary : Colors.textMuted}
+          />
+          <Text style={styles.consentText}>
+            J'accepte les{' '}
+            <Text style={styles.consentLink} onPress={() => Linking.openURL(LEGAL_URLS.cgv)}>
+              CGV
+            </Text>
+            {' '}et je demande l'exécution immédiate de mon abonnement, renonçant à mon droit de rétractation de 14 jours.
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.payButton, (processing || !acceptedCGV) && styles.payButtonDisabled]}
           onPress={handlePayment}
-          disabled={processing || !plan}
+          disabled={processing || !plan || !acceptedCGV}
         >
           {processing ? (
             <>
@@ -220,10 +247,6 @@ export default function PaymentScreen() {
             </>
           )}
         </TouchableOpacity>
-
-        <Text style={styles.termsText}>
-          En continuant, vous acceptez nos conditions générales d'utilisation
-        </Text>
       </View>
 
       <InfoModal
@@ -382,10 +405,20 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
   },
-  termsText: {
-    color: Colors.textMuted,
+  consentRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    marginBottom: 12,
+  },
+  consentText: {
+    flex: 1,
+    color: Colors.textSecondary,
     fontSize: 12,
-    textAlign: 'center',
-    marginTop: 12,
+    lineHeight: 17,
+  },
+  consentLink: {
+    color: Colors.primary,
+    fontWeight: '600',
   },
 });

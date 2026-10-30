@@ -23,6 +23,31 @@ async def test_register_and_login(client):
     assert login.json()["email"] == "alice@example.com"
 
 
+async def test_register_rejects_weak_password(client):
+    response = await client.post(
+        "/api/auth/register",
+        json={"email": "weak@example.com", "password": "short", "username": "weakpw"},
+    )
+    assert response.status_code == 422
+
+
+async def test_register_rejects_short_username(client):
+    response = await client.post(
+        "/api/auth/register",
+        json={"email": "shortname@example.com", "password": "StrongPass1", "username": "ab"},
+    )
+    assert response.status_code == 422
+
+
+async def test_change_password_rejects_weak_new_password(client, user_headers):
+    response = await client.put(
+        "/api/user/password",
+        json={"current_password": "SuperSecret123", "new_password": "short"},
+        headers=user_headers,
+    )
+    assert response.status_code == 422
+
+
 async def test_register_duplicate_email_rejected(client):
     payload = {"email": "bob@example.com", "password": "StrongPass1", "username": "bob"}
     first = await client.post("/api/auth/register", json=payload)

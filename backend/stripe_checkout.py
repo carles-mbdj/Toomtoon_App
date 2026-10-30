@@ -11,6 +11,8 @@ from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 import logging
 
+import email_service
+
 logger = logging.getLogger(__name__)
 
 # Stripe Price IDs will be created dynamically or configured here
@@ -342,6 +344,20 @@ async def handle_checkout_completed(db, session: stripe.checkout.Session):
     )
     
     logger.info(f"Subscription activated for user {user_id}: {plan_id}")
+
+    user = await db.users.find_one({"id": user_id})
+    if user and user.get("email"):
+        await email_service.send_email_async(
+            to_email=user["email"],
+            subject="Confirmation de votre abonnement ToomToon",
+            body_text=(
+                f"Bonjour {user.get('username', '')},\n\n"
+                f"Votre abonnement {plan['name']} est maintenant actif.\n"
+                f"Il sera renouvelé automatiquement le {current_period_end.strftime('%d/%m/%Y')}, "
+                "sauf si vous l'annulez avant cette date depuis l'application.\n\n"
+                "Merci de votre confiance,\nL'équipe ToomToon"
+            )
+        )
 
 
 async def handle_subscription_updated(db, subscription: stripe.Subscription):

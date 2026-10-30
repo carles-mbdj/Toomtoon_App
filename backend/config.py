@@ -53,6 +53,14 @@ STRIPE_WEBHOOK_SECRET = os.environ.get('STRIPE_WEBHOOK_SECRET', '')
 # static bearer token configured in its dashboard, not a signature.
 REVENUECAT_WEBHOOK_SECRET = os.environ.get('REVENUECAT_WEBHOOK_SECRET', '')
 
+# Transactional email (SMTP) - optional: unset in dev/CI, where
+# email_service.send_email just logs instead of sending.
+SMTP_HOST = os.environ.get('SMTP_HOST', '')
+SMTP_PORT = int(os.environ.get('SMTP_PORT', '587'))
+SMTP_USER = os.environ.get('SMTP_USER', '')
+SMTP_PASSWORD = os.environ.get('SMTP_PASSWORD', '')
+SMTP_FROM_EMAIL = os.environ.get('SMTP_FROM_EMAIL', '')
+
 # Initialize Stripe
 stripe.api_key = STRIPE_SECRET_KEY
 

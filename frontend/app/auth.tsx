@@ -8,43 +8,97 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  Alert,
+  Linking,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../src/constants/colors';
+import { LEGAL_URLS } from '../src/constants/legal';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '../src/store/authStore';
 import { LoadingSpinner } from '../src/components/LoadingSpinner';
+import { getPasswordStrength, isValidEmail, MIN_PASSWORD_LENGTH, type PasswordStrength } from '../src/utils/validation';
+
+interface FieldErrors {
+  email?: string;
+  password?: string;
+  username?: string;
+  confirmPassword?: string;
+}
+
+const STRENGTH_COLOR: Record<PasswordStrength, string> = {
+  faible: Colors.error,
+  moyen: Colors.warning,
+  fort: Colors.success,
+};
 
 export default function AuthScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { login, register, isLoading, error, clearError } = useAuthStore();
-  
+
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [username, setUsername] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+
+  const clearFieldError = (field: keyof FieldErrors) => {
+    if (fieldErrors[field]) setFieldErrors((prev) => ({ ...prev, [field]: undefined }));
+  };
+
+  const validate = (): boolean => {
+    const errors: FieldErrors = {};
+
+    if (!email.trim()) {
+      errors.email = 'Email requis';
+    } else if (!isValidEmail(email)) {
+      errors.email = 'Adresse email invalide';
+    }
+
+    if (!isLogin && username.trim().length < 3) {
+      errors.username = "Le nom d'utilisateur doit contenir au moins 3 caractères";
+    }
+
+    if (!password) {
+      errors.password = 'Mot de passe requis';
+    } else if (!isLogin && password.length < MIN_PASSWORD_LENGTH) {
+      errors.password = `Le mot de passe doit contenir au moins ${MIN_PASSWORD_LENGTH} caractères`;
+    }
+
+    if (!isLogin && password !== confirmPassword) {
+      errors.confirmPassword = 'Les mots de passe ne correspondent pas';
+    }
+
+    setFieldErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
 
   const handleSubmit = async () => {
-    if (!email || !password || (!isLogin && !username)) {
-      Alert.alert('Erreur', 'Veuillez remplir tous les champs');
-      return;
-    }
+    if (!validate()) return;
 
     let success = false;
     if (isLogin) {
-      success = await login(email, password);
+      success = await login(email.trim(), password);
     } else {
-      success = await register(email, password, username);
+      success = await register(email.trim(), password, username.trim());
     }
 
     if (success) {
       router.replace('/(tabs)');
     }
   };
+
+  const toggleMode = () => {
+    setIsLogin(!isLogin);
+    setFieldErrors({});
+    setConfirmPassword('');
+    clearError();
+  };
+
+  const strength = password.length > 0 ? getPasswordStrength(password) : null;
 
   return (
     <KeyboardAvoidingView
@@ -95,50 +149,81 @@ export default function AuthScreen() {
         {/* Form */}
         <View style={styles.form}>
           {!isLogin && (
-            <View style={styles.inputContainer}>
-              <Ionicons name="person-outline" size={20} color={Colors.textMuted} />
-              <TextInput
-                style={styles.input}
-                placeholder="Nom d'utilisateur"
-                placeholderTextColor={Colors.textMuted}
-                value={username}
-                onChangeText={setUsername}
-                autoCapitalize="none"
-              />
+            <View>
+              <View style={[styles.inputContainer, fieldErrors.username && styles.inputContainerError]}>
+                <Ionicons name="person-outline" size={20} color={Colors.textMuted} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Nom d'utilisateur"
+                  placeholderTextColor={Colors.textMuted}
+                  value={username}
+                  onChangeText={(v) => { setUsername(v); clearFieldError('username'); }}
+                  autoCapitalize="none"
+                />
+              </View>
+              {fieldErrors.username && <Text style={styles.fieldErrorText}>{fieldErrors.username}</Text>}
             </View>
           )}
 
-          <View style={styles.inputContainer}>
-            <Ionicons name="mail-outline" size={20} color={Colors.textMuted} />
-            <TextInput
-              style={styles.input}
-              placeholder="Email"
-              placeholderTextColor={Colors.textMuted}
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-            />
+          <View>
+            <View style={[styles.inputContainer, fieldErrors.email && styles.inputContainerError]}>
+              <Ionicons name="mail-outline" size={20} color={Colors.textMuted} />
+              <TextInput
+                style={styles.input}
+                placeholder="Email"
+                placeholderTextColor={Colors.textMuted}
+                value={email}
+                onChangeText={(v) => { setEmail(v); clearFieldError('email'); }}
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
+            </View>
+            {fieldErrors.email && <Text style={styles.fieldErrorText}>{fieldErrors.email}</Text>}
           </View>
 
-          <View style={styles.inputContainer}>
-            <Ionicons name="lock-closed-outline" size={20} color={Colors.textMuted} />
-            <TextInput
-              style={styles.input}
-              placeholder="Mot de passe"
-              placeholderTextColor={Colors.textMuted}
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry={!showPassword}
-            />
-            <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-              <Ionicons
-                name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                size={20}
-                color={Colors.textMuted}
+          <View>
+            <View style={[styles.inputContainer, fieldErrors.password && styles.inputContainerError]}>
+              <Ionicons name="lock-closed-outline" size={20} color={Colors.textMuted} />
+              <TextInput
+                style={styles.input}
+                placeholder="Mot de passe"
+                placeholderTextColor={Colors.textMuted}
+                value={password}
+                onChangeText={(v) => { setPassword(v); clearFieldError('password'); }}
+                secureTextEntry={!showPassword}
               />
-            </TouchableOpacity>
+              <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+                <Ionicons
+                  name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                  size={20}
+                  color={Colors.textMuted}
+                />
+              </TouchableOpacity>
+            </View>
+            {fieldErrors.password && <Text style={styles.fieldErrorText}>{fieldErrors.password}</Text>}
+            {!isLogin && !fieldErrors.password && strength && (
+              <Text style={[styles.strengthText, { color: STRENGTH_COLOR[strength] }]}>
+                Robustesse du mot de passe : {strength}
+              </Text>
+            )}
           </View>
+
+          {!isLogin && (
+            <View>
+              <View style={[styles.inputContainer, fieldErrors.confirmPassword && styles.inputContainerError]}>
+                <Ionicons name="lock-closed-outline" size={20} color={Colors.textMuted} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Confirmer le mot de passe"
+                  placeholderTextColor={Colors.textMuted}
+                  value={confirmPassword}
+                  onChangeText={(v) => { setConfirmPassword(v); clearFieldError('confirmPassword'); }}
+                  secureTextEntry={!showPassword}
+                />
+              </View>
+              {fieldErrors.confirmPassword && <Text style={styles.fieldErrorText}>{fieldErrors.confirmPassword}</Text>}
+            </View>
+          )}
 
           <TouchableOpacity
             style={[styles.submitButton, isLoading && styles.submitButtonDisabled]}
@@ -153,6 +238,20 @@ export default function AuthScreen() {
               </Text>
             )}
           </TouchableOpacity>
+
+          {!isLogin && (
+            <Text style={styles.legalText}>
+              En vous inscrivant, vous acceptez nos{' '}
+              <Text style={styles.legalLink} onPress={() => Linking.openURL(LEGAL_URLS.cgu)}>
+                CGU
+              </Text>
+              {' '}et notre{' '}
+              <Text style={styles.legalLink} onPress={() => Linking.openURL(LEGAL_URLS.privacy)}>
+                Politique de confidentialité
+              </Text>
+              .
+            </Text>
+          )}
         </View>
 
         {/* Toggle Auth Mode */}
@@ -160,10 +259,7 @@ export default function AuthScreen() {
           <Text style={styles.toggleText}>
             {isLogin ? 'Pas encore de compte?' : 'Déjà un compte?'}
           </Text>
-          <TouchableOpacity onPress={() => {
-            setIsLogin(!isLogin);
-            clearError();
-          }}>
+          <TouchableOpacity onPress={toggleMode}>
             <Text style={styles.toggleLink}>
               {isLogin ? "S'inscrire" : 'Se connecter'}
             </Text>
@@ -252,12 +348,29 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 4,
     gap: 12,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  inputContainerError: {
+    borderColor: Colors.error,
   },
   input: {
     flex: 1,
     color: Colors.text,
     fontSize: 16,
     paddingVertical: 14,
+  },
+  fieldErrorText: {
+    color: Colors.error,
+    fontSize: 12,
+    marginTop: 6,
+    marginLeft: 4,
+  },
+  strengthText: {
+    fontSize: 12,
+    marginTop: 6,
+    marginLeft: 4,
+    textTransform: 'capitalize',
   },
   submitButton: {
     backgroundColor: Colors.primary,
@@ -287,6 +400,17 @@ const styles = StyleSheet.create({
   toggleLink: {
     color: Colors.primary,
     fontSize: 15,
+    fontWeight: '600',
+  },
+  legalText: {
+    color: Colors.textMuted,
+    fontSize: 12,
+    textAlign: 'center',
+    marginTop: 16,
+    lineHeight: 18,
+  },
+  legalLink: {
+    color: Colors.primary,
     fontWeight: '600',
   },
 });

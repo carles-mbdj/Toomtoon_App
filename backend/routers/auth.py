@@ -23,6 +23,7 @@ from models import (
     UserLogin,
     UserResponse,
     UserUpdate,
+    validate_password_strength,
 )
 from stripe_checkout import cancel_subscription
 
@@ -159,6 +160,11 @@ async def verify_reset_code(email: str, code: str):
 @router.post("/auth/reset-password")
 async def reset_password(email: str, code: str, new_password: str):
     """Reset password with verified code"""
+    try:
+        new_password = validate_password_strength(new_password)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
     if email not in password_reset_tokens:
         raise HTTPException(status_code=400, detail="Code invalide ou expiré")
 

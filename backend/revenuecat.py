@@ -19,9 +19,18 @@ from datetime import datetime
 from typing import Any, Dict, Optional
 
 import config
+import email_service
 
 # Event types that mean "the user has active entitlement right now".
 ACTIVE_EVENT_TYPES = {"INITIAL_PURCHASE", "RENEWAL", "UNCANCELLATION", "PRODUCT_CHANGE"}
+
+# Only used for the confirmation email's wording - not a source of truth
+# for pricing/duration (that lives in Google Play Console/RevenueCat).
+PLAN_NAMES = {
+    "plan_1_month": "1 mois",
+    "plan_3_months": "3 mois",
+    "plan_12_months": "12 mois",
+}
 
 
 async def handle_event(event: Dict[str, Any]) -> None:
@@ -75,6 +84,25 @@ async def _activate(event: Dict[str, Any]) -> None:
         {"$set": {"subscription_type": plan_id, "subscription_end": period_end}},
     )
     config.logger.info(f"Google Play subscription activated for user {user_id}: {plan_id}")
+
+    # Only on the first purchase, not every renewal - the user asked for a
+    # confirmation when they subscribe, not a repeated email every cycle.
+    if event.get("type") == "INITIAL_PURCHASE":
+        user = await config.db.users.find_one({"id": user_id})
+        if user and user.get("email"):
+            plan_name = PLAN_NAMES.get(plan_id, plan_id)
+            period_end_str = period_end.strftime("%d/%m/%Y") if period_end else "la fin de la période en cours"
+            await email_service.send_email_async(
+                to_email=user["email"],
+                subject="Confirmation de votre abonnement ToomToon",
+                body_text=(
+                    f"Bonjour {user.get('username', '')},\n\n"
+                    f"Votre abonnement {plan_name} est maintenant actif.\n"
+                    f"Il sera renouvelé automatiquement le {period_end_str}, "
+                    "sauf si vous l'annulez avant cette date depuis le Play Store.\n\n"
+                    "Merci de votre confiance,\nL'équipe ToomToon"
+                )
+            )
 
 
 async def _mark_cancel_at_period_end(user_id: str) -> None:

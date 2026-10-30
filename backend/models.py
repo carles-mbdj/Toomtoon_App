@@ -3,15 +3,32 @@ import uuid
 from datetime import datetime
 from typing import Dict, List, Optional
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
 # ==================== USERS ====================
 
+def validate_password_strength(password: str) -> str:
+    """Shared by every model that sets a password, so the rule can't
+    drift between register/change-password/reset-password."""
+    if len(password) < 8:
+        raise ValueError("Le mot de passe doit contenir au moins 8 caractères")
+    if len(password) > 72:
+        # bcrypt silently ignores anything past 72 bytes - reject up front
+        # instead of accepting a password that's actually truncated.
+        raise ValueError("Le mot de passe ne doit pas dépasser 72 caractères")
+    return password
+
+
 class UserCreate(BaseModel):
     email: EmailStr
     password: str
-    username: str
+    username: str = Field(min_length=3, max_length=30)
+
+    @field_validator("password")
+    @classmethod
+    def _validate_password(cls, v: str) -> str:
+        return validate_password_strength(v)
 
 class UserLogin(BaseModel):
     email: EmailStr
@@ -49,6 +66,11 @@ class UserUpdate(BaseModel):
 class PasswordChange(BaseModel):
     current_password: str
     new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def _validate_new_password(cls, v: str) -> str:
+        return validate_password_strength(v)
 
 class PasswordResetRequest(BaseModel):
     email: EmailStr
