@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -15,20 +15,60 @@ import { Header } from '../../src/components/Header';
 import { LoadingSpinner } from '../../src/components/LoadingSpinner';
 import { useAuthStore } from '../../src/store/authStore';
 import { checkoutApi } from '../../src/services/api';
+import { isPurchasesAvailable, purchasePackage } from '../../src/services/purchases';
 import { getErrorMessage } from '../../src/utils/errors';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useSubscriptionPlans } from '../../src/hooks/queries';
+import { useCurrentOffering, useSubscriptionPlans } from '../../src/hooks/queries';
+
+// Our internal plan ids double as Google Play / RevenueCat product ids
+// (see backend/revenuecat.py), so duration can be derived from them
+// directly instead of relying on a separate lookup.
+const PLAN_DURATION_DAYS: Record<string, number> = {
+  plan_1_month: 30,
+  plan_3_months: 90,
+  plan_12_months: 365,
+};
+
+interface DisplayPlan {
+  id: string;
+  name: string;
+  displayPrice: string;
+  duration_days: number;
+  popular: boolean;
+}
 
 export default function SubscriptionScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { isAuthenticated, user, refreshUser } = useAuthStore();
-  const plansQuery = useSubscriptionPlans();
-  const plans = plansQuery.data ?? [];
+  const onAndroidBilling = isPurchasesAvailable();
+  const plansQuery = useSubscriptionPlans({ enabled: !onAndroidBilling });
+  const offeringQuery = useCurrentOffering();
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showSelectPlanModal, setShowSelectPlanModal] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [purchasing, setPurchasing] = useState(false);
+
+  const plans: DisplayPlan[] = useMemo(() => {
+    if (onAndroidBilling) {
+      return (offeringQuery.data?.availablePackages ?? []).map((pkg) => ({
+        id: pkg.product.identifier,
+        name: pkg.product.title || pkg.identifier,
+        displayPrice: pkg.product.priceString,
+        duration_days: PLAN_DURATION_DAYS[pkg.product.identifier] ?? 0,
+        popular: pkg.product.identifier === 'plan_3_months',
+      }));
+    }
+    return (plansQuery.data ?? []).map((p) => ({
+      id: p.id,
+      name: p.name,
+      displayPrice: p.prices?.EUR ? `${(p.prices.EUR / 100).toFixed(0)}€` : '0€',
+      duration_days: p.duration_days,
+      popular: p.popular,
+    }));
+  }, [onAndroidBilling, offeringQuery.data, plansQuery.data]);
+  const isLoadingPlans = onAndroidBilling ? offeringQuery.isLoading : plansQuery.isLoading;
 
   const handleCancelSubscription = () => {
     Alert.alert(
@@ -66,7 +106,7 @@ export default function SubscriptionScreen() {
     }
   }, [plans, selectedPlan]);
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
     if (!isAuthenticated) {
       setShowLoginModal(true);
       return;
@@ -77,11 +117,35 @@ export default function SubscriptionScreen() {
       return;
     }
 
-    // Navigate to payment screen with selected plan
+    if (onAndroidBilling) {
+      const pkg = offeringQuery.data?.availablePackages.find((p) => p.product.identifier === selectedPlan);
+      if (!pkg) {
+        Alert.alert('Indisponible', "Ce plan n'est pas disponible pour le moment.");
+        return;
+      }
+      setPurchasing(true);
+      try {
+        await purchasePackage(pkg);
+        await refreshUser();
+        Alert.alert('Abonnement activé', 'Merci pour votre achat !');
+      } catch (error) {
+        const userCancelled =
+          typeof error === 'object' && error !== null && 'userCancelled' in error &&
+          Boolean((error as { userCancelled?: boolean }).userCancelled);
+        if (!userCancelled) {
+          Alert.alert('Erreur', "L'achat n'a pas pu être finalisé.");
+        }
+      } finally {
+        setPurchasing(false);
+      }
+      return;
+    }
+
+    // Navigate to payment screen with selected plan (Stripe)
     router.push(`/payment?planId=${selectedPlan}`);
   };
 
-  if (plansQuery.isLoading) {
+  if (isLoadingPlans) {
     return <LoadingSpinner fullScreen text="Chargement des offres..." />;
   }
 
@@ -176,9 +240,7 @@ export default function SubscriptionScreen() {
                 />
                 <Text style={styles.planLabel}>{plan.name}</Text>
               </View>
-              <Text style={styles.planPrice}>
-                {plan.prices?.EUR ? `${(plan.prices.EUR / 100).toFixed(0)}€` : '0€'}
-              </Text>
+              <Text style={styles.planPrice}>{plan.displayPrice}</Text>
               <Text style={styles.planPriceDetail}>
                 {plan.duration_days} jours
               </Text>
@@ -193,20 +255,31 @@ export default function SubscriptionScreen() {
 
         {/* Payment Methods */}
         <View style={styles.paymentMethods}>
-          <Text style={styles.paymentTitle}>Paiement sécurisé par Stripe</Text>
+          <Text style={styles.paymentTitle}>
+            {onAndroidBilling ? 'Paiement sécurisé par Google Play' : 'Paiement sécurisé par Stripe'}
+          </Text>
           <View style={styles.paymentIcons}>
-            <View style={styles.paymentIcon}>
-              <Ionicons name="card" size={20} color={Colors.textSecondary} />
-              <Text style={styles.paymentText}>Carte</Text>
-            </View>
-            <View style={styles.paymentIcon}>
-              <Ionicons name="logo-apple" size={20} color={Colors.textSecondary} />
-              <Text style={styles.paymentText}>Apple Pay</Text>
-            </View>
-            <View style={styles.paymentIcon}>
-              <Ionicons name="logo-google" size={20} color={Colors.textSecondary} />
-              <Text style={styles.paymentText}>Google Pay</Text>
-            </View>
+            {onAndroidBilling ? (
+              <View style={styles.paymentIcon}>
+                <Ionicons name="logo-google-playstore" size={20} color={Colors.textSecondary} />
+                <Text style={styles.paymentText}>Google Play</Text>
+              </View>
+            ) : (
+              <>
+                <View style={styles.paymentIcon}>
+                  <Ionicons name="card" size={20} color={Colors.textSecondary} />
+                  <Text style={styles.paymentText}>Carte</Text>
+                </View>
+                <View style={styles.paymentIcon}>
+                  <Ionicons name="logo-apple" size={20} color={Colors.textSecondary} />
+                  <Text style={styles.paymentText}>Apple Pay</Text>
+                </View>
+                <View style={styles.paymentIcon}>
+                  <Ionicons name="logo-google" size={20} color={Colors.textSecondary} />
+                  <Text style={styles.paymentText}>Google Pay</Text>
+                </View>
+              </>
+            )}
           </View>
         </View>
 
@@ -224,14 +297,18 @@ export default function SubscriptionScreen() {
         <TouchableOpacity
           style={[
             styles.subscribeButton,
-            !selectedPlan && styles.subscribeButtonDisabled,
+            (!selectedPlan || purchasing) && styles.subscribeButtonDisabled,
           ]}
           onPress={handleContinue}
-          disabled={!selectedPlan}
+          disabled={!selectedPlan || purchasing}
         >
           <Ionicons name="card" size={24} color={Colors.white} />
           <Text style={styles.subscribeButtonText}>
-            {hasActiveSubscription ? 'Prolonger mon abonnement' : 'Continuer vers le paiement'}
+            {purchasing
+              ? 'Achat en cours...'
+              : hasActiveSubscription
+                ? 'Prolonger mon abonnement'
+                : 'Continuer vers le paiement'}
           </Text>
         </TouchableOpacity>
       </View>

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { getRefreshToken, getToken, removeRefreshToken, removeToken, setRefreshToken, setToken } from '../services/tokenStorage';
 import { authApi, setOnAuthFailure, userApi, type UserProfile } from '../services/api';
+import { loginPurchases, logoutPurchases } from '../services/purchases';
 import { getErrorMessage } from '../utils/errors';
 
 type User = UserProfile;
@@ -41,6 +42,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       await setToken(token);
       await setRefreshToken(refresh_token);
       set({ user, token, isAuthenticated: true, isAdmin: user.is_admin || false, isLoading: false });
+      loginPurchases(user.id).catch((e) => console.log('RevenueCat login error:', e));
       return true;
     } catch (error) {
       set({ error: getErrorMessage(error, 'Erreur de connexion'), isLoading: false });
@@ -57,6 +59,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       await setToken(token);
       await setRefreshToken(refresh_token);
       set({ user, token, isAuthenticated: true, isLoading: false });
+      loginPurchases(user.id).catch((e) => console.log('RevenueCat login error:', e));
       return true;
     } catch (error) {
       set({ error: getErrorMessage(error, "Erreur d'inscription"), isLoading: false });
@@ -71,6 +74,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       // again, but don't block clearing the local session on it.
       authApi.logout(refreshToken).catch(() => {});
     }
+    logoutPurchases().catch((e) => console.log('RevenueCat logout error:', e));
     await removeToken();
     await removeRefreshToken();
     set({ user: null, token: null, isAuthenticated: false, isAdmin: false });
@@ -86,13 +90,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       }
       
       const response = await authApi.getMe();
-      set({ 
-        user: response.data, 
-        token, 
-        isAuthenticated: true, 
+      set({
+        user: response.data,
+        token,
+        isAuthenticated: true,
         isAdmin: response.data.is_admin || false,
-        isLoading: false 
+        isLoading: false
       });
+      loginPurchases(response.data.id).catch((e) => console.log('RevenueCat login error:', e));
     } catch (error) {
       await removeToken();
       set({ user: null, token: null, isAuthenticated: false, isAdmin: false, isLoading: false });
@@ -129,6 +134,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       set({ isLoading: true, error: null });
       await userApi.deleteAccount();
+      logoutPurchases().catch((e) => console.log('RevenueCat logout error:', e));
       await removeToken();
       await removeRefreshToken();
       set({ user: null, token: null, isAuthenticated: false, isAdmin: false, isLoading: false });

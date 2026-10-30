@@ -88,9 +88,11 @@ async def test_test_confirm_payment_disabled_by_default(client, admin_headers):
     assert response.status_code == 404
 
 
-async def test_stripe_webhook_rejected_without_secret(client):
+async def test_stripe_webhook_rejected_without_secret(client, monkeypatch):
     """Without STRIPE_WEBHOOK_SECRET configured, the webhook must refuse
     the request rather than trusting an unsigned payload."""
+    import config
+    monkeypatch.setattr(config, "STRIPE_WEBHOOK_SECRET", "")
     response = await client.post(
         "/api/webhooks/stripe",
         json={"type": "payment_intent.succeeded", "data": {"object": {"id": "pi_fake"}}},

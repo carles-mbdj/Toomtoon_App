@@ -7,6 +7,7 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { Colors } from '../src/constants/colors';
 import { useAuthStore } from '../src/store/authStore';
 import { queryClient } from '../src/services/queryClient';
+import { configurePurchases } from '../src/services/purchases';
 
 export default function RootLayout() {
   const { checkAuth } = useAuthStore();
@@ -15,6 +16,7 @@ export default function RootLayout() {
     // Check authentication on app start
     checkAuth();
     // NOTE: Seed removed to preserve data created via admin panel
+    configurePurchases();
   }, []);
 
   return (

@@ -4,7 +4,8 @@ authenticated with a static bearer token instead of a signature."""
 import config
 
 
-async def test_webhook_rejected_without_secret(client):
+async def test_webhook_rejected_without_secret(client, monkeypatch):
+    monkeypatch.setattr(config, "REVENUECAT_WEBHOOK_SECRET", "")
     response = await client.post(
         "/api/webhooks/revenuecat",
         json={"event": {"type": "INITIAL_PURCHASE", "app_user_id": "u1", "product_id": "plan_1_month"}},

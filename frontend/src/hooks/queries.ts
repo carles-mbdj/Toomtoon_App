@@ -9,6 +9,7 @@ import {
   subscriptionApi,
   webtoonsApi,
 } from '../services/api';
+import { getCurrentOffering, isPurchasesAvailable } from '../services/purchases';
 import type { SubscriptionPlan } from '../types';
 
 // ==================== WEBTOONS ====================
@@ -154,5 +155,15 @@ export function useSubscriptionPlans(options?: { enabled?: boolean }) {
     queryKey: ['subscriptionPlans'],
     queryFn: () => subscriptionApi.getPlans().then((res) => normalizePlans(res.data)),
     enabled: options?.enabled ?? true,
+  });
+}
+
+// ==================== GOOGLE PLAY BILLING (RevenueCat) ====================
+
+export function useCurrentOffering() {
+  return useQuery({
+    queryKey: ['revenuecat', 'currentOffering'],
+    queryFn: () => getCurrentOffering(),
+    enabled: isPurchasesAvailable(),
   });
 }
