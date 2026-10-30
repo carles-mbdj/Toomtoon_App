@@ -9,7 +9,9 @@ dist/
 web-build/
 expo-env.d.ts
 
-# Native
+# Native (managed workflow - EAS regenerates these on every cloud build)
+/android/
+/ios/
 .kotlin/
 *.orig.*
 *.jks
