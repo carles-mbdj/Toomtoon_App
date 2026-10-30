@@ -48,6 +48,34 @@ async def test_initial_purchase_activates_subscription(client, user_headers, use
     assert user["subscription_type"] == "plan_3_months"
 
 
+async def test_google_play_base_plan_suffix_is_stripped(client, user_token, fresh_db, monkeypatch):
+    """Google Play sends product_id as "subscription_id:base_plan_id"
+    (e.g. plan_1_month:monthly) - only the Test Store sends the plain id."""
+    import jwt as pyjwt
+
+    monkeypatch.setattr(config, "REVENUECAT_WEBHOOK_SECRET", "test-secret")
+    payload = pyjwt.decode(user_token, config.JWT_SECRET, algorithms=[config.JWT_ALGORITHM])
+    user_id = payload["user_id"]
+
+    response = await client.post(
+        "/api/webhooks/revenuecat",
+        json={"event": {
+            "type": "INITIAL_PURCHASE",
+            "app_user_id": user_id,
+            "product_id": "plan_1_month:monthly",
+            "expiration_at_ms": 4102444800000,
+        }},
+        headers={"Authorization": "Bearer test-secret"},
+    )
+    assert response.status_code == 200, response.text
+
+    user = await fresh_db.users.find_one({"id": user_id})
+    assert user["subscription_type"] == "plan_1_month"
+
+    sub = await fresh_db.subscriptions.find_one({"user_id": user_id, "subscription_provider": "google_play"})
+    assert sub["plan"] == "plan_1_month"
+
+
 async def test_initial_purchase_sends_confirmation_email(client, user_token, fresh_db, monkeypatch):
     import jwt as pyjwt
 

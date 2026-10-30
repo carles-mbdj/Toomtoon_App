@@ -9,11 +9,15 @@ set up once the RevenueCat SDK is wired into the app):
   - The RevenueCat SDK must be initialized with `appUserID` set to our
     own `User.id`, so `event["app_user_id"]` below IS the ToomToon user
     id directly - no separate customer-id mapping table is needed.
-  - Google Play Console / RevenueCat product IDs must be named exactly
-    like our internal plan ids (plan_1_month, plan_3_months,
-    plan_12_months), so `event["product_id"]` can be stored directly in
-    `Subscription.plan` / `User.subscription_type` with no translation
-    table, the same way Stripe price IDs map to our plan ids.
+  - Google Play Console subscription IDs must be named exactly like our
+    internal plan ids (plan_1_month, plan_3_months, plan_12_months).
+    On Google Play, RevenueCat's `product_id` is actually
+    "<subscription_id>:<base_plan_id>" (e.g. "plan_1_month:monthly"),
+    since a Play subscription can have several base plans - see
+    `_plan_id_from_product_id` below, which strips the suffix so the
+    rest of the code only ever sees our plain plan id. The RevenueCat
+    Test Store has no base plans and already sends the plain id, so the
+    same code path handles both.
 """
 from datetime import datetime
 from typing import Any, Dict, Optional
@@ -57,9 +61,17 @@ def _period_end(event: Dict[str, Any]) -> Optional[datetime]:
     return datetime.utcfromtimestamp(expiration_ms / 1000) if expiration_ms else None
 
 
+def _plan_id_from_product_id(product_id: Optional[str]) -> Optional[str]:
+    """Google Play sends "plan_1_month:monthly"; the Test Store (and any
+    other store) sends the plain id. Always take the part before ':'."""
+    if not product_id:
+        return product_id
+    return product_id.split(":")[0]
+
+
 async def _activate(event: Dict[str, Any]) -> None:
     user_id = event["app_user_id"]
-    plan_id = event.get("product_id")
+    plan_id = _plan_id_from_product_id(event.get("product_id"))
     period_end = _period_end(event)
 
     await config.db.subscriptions.update_one(

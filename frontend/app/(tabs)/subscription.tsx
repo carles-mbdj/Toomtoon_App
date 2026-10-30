@@ -17,7 +17,7 @@ import { Header } from '../../src/components/Header';
 import { LoadingSpinner } from '../../src/components/LoadingSpinner';
 import { useAuthStore } from '../../src/store/authStore';
 import { checkoutApi } from '../../src/services/api';
-import { isPurchasesAvailable, purchasePackage } from '../../src/services/purchases';
+import { isPurchasesAvailable, normalizePlanId, purchasePackage } from '../../src/services/purchases';
 import { getErrorMessage } from '../../src/utils/errors';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCurrentOffering, useSubscriptionPlans } from '../../src/hooks/queries';
@@ -55,13 +55,16 @@ export default function SubscriptionScreen() {
 
   const plans: DisplayPlan[] = useMemo(() => {
     if (onAndroidBilling) {
-      return (offeringQuery.data?.availablePackages ?? []).map((pkg) => ({
-        id: pkg.product.identifier,
-        name: pkg.product.title || pkg.identifier,
-        displayPrice: pkg.product.priceString,
-        duration_days: PLAN_DURATION_DAYS[pkg.product.identifier] ?? 0,
-        popular: pkg.product.identifier === 'plan_3_months',
-      }));
+      return (offeringQuery.data?.availablePackages ?? []).map((pkg) => {
+        const planId = normalizePlanId(pkg.product.identifier);
+        return {
+          id: planId,
+          name: pkg.product.title || pkg.identifier,
+          displayPrice: pkg.product.priceString,
+          duration_days: PLAN_DURATION_DAYS[planId] ?? 0,
+          popular: planId === 'plan_3_months',
+        };
+      });
     }
     return (plansQuery.data ?? []).map((p) => ({
       id: p.id,
@@ -125,7 +128,7 @@ export default function SubscriptionScreen() {
         Alert.alert('CGV requises', "Veuillez accepter les CGV pour continuer.");
         return;
       }
-      const pkg = offeringQuery.data?.availablePackages.find((p) => p.product.identifier === selectedPlan);
+      const pkg = offeringQuery.data?.availablePackages.find((p) => normalizePlanId(p.product.identifier) === selectedPlan);
       if (!pkg) {
         Alert.alert('Indisponible', "Ce plan n'est pas disponible pour le moment.");
         return;

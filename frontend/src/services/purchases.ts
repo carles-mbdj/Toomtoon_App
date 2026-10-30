@@ -52,4 +52,13 @@ export async function purchasePackage(pkg: PurchasesPackage): Promise<CustomerIn
   return customerInfo;
 }
 
+/** On Google Play, RevenueCat's product id is "<subscription_id>:<base_plan_id>"
+ * (e.g. "plan_1_month:monthly") since a Play subscription can have several
+ * base plans - the Test Store has no base plans and already sends the
+ * plain id. Always strip the suffix so the rest of the app only ever
+ * deals with our own plan ids (mirrors backend/revenuecat.py). */
+export function normalizePlanId(productIdentifier: string): string {
+  return productIdentifier.split(':')[0];
+}
+
 export type { PurchasesOffering, PurchasesPackage, CustomerInfo };
