@@ -109,23 +109,25 @@ cd admin-panel
 npm install
 ```
 
-### Configurer l'URL de l'API
-Modifiez `src/api/config.ts`:
-```typescript
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001/api';
-```
-
-### Mode Développement
-```bash
-npm run dev
-```
-Le panel sera accessible sur: http://localhost:5173
-
-### Build de Production
+### Build
 ```bash
 npm run build
 ```
-Le build sera dans le dossier `dist/` et sera servi automatiquement par le backend sur `/api/admin/`
+Le build est généré dans `dist/` et servi automatiquement par le backend sur `/api/admin/`.
+
+### ⚠️ Comment se connecter au panel admin (lire avant de se connecter)
+
+**Utilisation normale** : une fois le build fait, le panel admin n'a besoin d'aucun serveur séparé. Démarrez juste le backend (section 3) et ouvrez :
+
+```
+http://localhost:8001/api/admin
+```
+
+Connectez-vous avec `ADMIN_EMAIL` / `ADMIN_PASSWORD` tels que définis dans `backend/.env`.
+
+**Ne lancez pas `npm run dev` pour vous connecter au panel admin.** Cette commande démarre un serveur Vite séparé sur le port 3001, **sans backend derrière** — toute tentative de connexion échoue avec une erreur, même avec des identifiants corrects, car la requête ne part jamais vers le vrai serveur (port 8001). `npm run dev` ne sert qu'au développement actif du code du panel admin lui-même (rechargement à chaud), et nécessiterait un proxy vers le backend pour fonctionner — non configuré aujourd'hui.
+
+**Si vous modifiez le code du panel admin** (fichiers dans `admin-panel/src/`), il faut relancer `npm run build` avant que le changement soit visible sur `http://localhost:8001/api/admin` — le backend sert le dossier `dist/` déjà construit, pas le code source en direct.
 
 ---
 
@@ -169,11 +171,18 @@ npx expo start
 
 ## 6. Initialiser les Données de Démo
 
-Une fois le backend démarré, appelez l'endpoint de seed pour créer les données de démonstration:
+L'endpoint de seed est protégé (réservé aux administrateurs) depuis le durcissement de sécurité du backend — un simple `curl` sans authentification renverra une erreur 401/403. Récupérez d'abord un token admin, puis utilisez-le :
 
 ```bash
-curl -X POST http://localhost:8001/api/seed
+TOKEN=$(curl -s -X POST http://localhost:8001/api/admin/login \
+  -H "Content-Type: application/json" \
+  -d "{\"email\":\"VOTRE_ADMIN_EMAIL\",\"password\":\"VOTRE_ADMIN_PASSWORD\"}" \
+  | python -c "import sys,json; print(json.load(sys.stdin)['token'])")
+
+curl -X POST http://localhost:8001/api/seed -H "Authorization: Bearer $TOKEN"
 ```
+
+(remplacez `VOTRE_ADMIN_EMAIL`/`VOTRE_ADMIN_PASSWORD` par les valeurs de `ADMIN_EMAIL`/`ADMIN_PASSWORD` dans `backend/.env`)
 
 Cela créera:
 - 8 webtoons de démonstration
@@ -188,8 +197,8 @@ Cela créera:
 | Application | URL | Identifiants |
 |------------|-----|--------------|
 | API Backend | http://localhost:8001/api | - |
-| Panel Admin | http://localhost:8001/api/admin | admin@toomtoon.com / admin123 |
-| App Mobile (Web) | http://localhost:3000 | Créer un compte utilisateur |
+| Panel Admin | http://localhost:8001/api/admin | `ADMIN_EMAIL` / `ADMIN_PASSWORD` depuis `backend/.env` (jamais `npm run dev` / port 3001, voir section 4) |
+| App Mobile (Web) | http://localhost:8081 (`npx expo start --web`) | Créer un compte utilisateur |
 
 ---
 
@@ -227,15 +236,10 @@ pytest -v
 
 ### Admin Panel
 ```bash
-# Développement
-npm run dev
-
-# Build production
+# Build (à refaire après chaque modification du code du panel admin)
 npm run build
-
-# Preview du build
-npm run preview
 ```
+Pas de `npm run dev` pour un usage normal — voir l'avertissement de la section 4.
 
 ### Frontend Mobile
 ```bash
@@ -281,6 +285,10 @@ npx expo start --clear
 ### Le panel admin affiche une page blanche
 - Reconstruisez le panel: `cd admin-panel && npm run build`
 - Redémarrez le backend
+
+### "Erreur de connexion" au panel admin alors que les identifiants sont corrects
+- Vérifiez l'URL dans la barre d'adresse : elle doit être `http://localhost:8001/api/admin`, **pas** `http://localhost:3001/...`.
+- Le port 3001 est celui de `npm run dev` (Vite) — il n'a pas de backend derrière, donc toute connexion y échoue quels que soient les identifiants. Fermez ce serveur s'il tourne et utilisez le port 8001.
 
 ---
 
