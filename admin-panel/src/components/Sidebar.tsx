@@ -1,16 +1,17 @@
 import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { 
-  LayoutDashboard, 
-  BookOpen, 
-  Users, 
-  Newspaper, 
-  Settings, 
+import {
+  LayoutDashboard,
+  BookOpen,
+  Users,
+  Newspaper,
+  Settings,
   LogOut,
   X,
   Tag,
   CreditCard,
   Receipt,
+  MessageSquare,
   Sun,
   Moon
 } from 'lucide-react';
@@ -30,6 +31,7 @@ const navItems = [
   { to: '/subscriptions', icon: CreditCard, label: 'Abonnements' },
   { to: '/payments', icon: Receipt, label: 'Paiements' },
   { to: '/articles', icon: Newspaper, label: 'Toom-Mag' },
+  { to: '/comments', icon: MessageSquare, label: 'Commentaires' },
   { to: '/settings', icon: Settings, label: 'Paramètres' },
 ];
 

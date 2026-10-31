@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { useAuthStore } from '../../store/authStore';
-import { useComments, useCreateComment, useLikeComment } from '../../hooks/queries';
+import { useComments, useCreateComment, useDislikeComment, useLikeComment } from '../../hooks/queries';
 import { LoadingSpinner } from '../LoadingSpinner';
 
 interface CommentsSectionProps {
@@ -32,6 +32,7 @@ export const CommentsSection: React.FC<CommentsSectionProps> = ({
   const commentsQuery = useComments(params);
   const createComment = useCreateComment(params);
   const likeComment = useLikeComment(params);
+  const dislikeComment = useDislikeComment(params);
   const comments = commentsQuery.data ?? [];
   const displayedComments = previewCount && !showAll ? comments.slice(0, previewCount) : comments;
 
@@ -63,6 +64,18 @@ export const CommentsSection: React.FC<CommentsSectionProps> = ({
       await likeComment.mutateAsync(commentId);
     } catch (error) {
       console.log('Error liking:', error);
+    }
+  };
+
+  const handleDislikeComment = async (commentId: string) => {
+    if (!isAuthenticated) {
+      Alert.alert('Connexion requise', 'Connectez-vous pour réagir');
+      return;
+    }
+    try {
+      await dislikeComment.mutateAsync(commentId);
+    } catch (error) {
+      console.log('Error disliking:', error);
     }
   };
 
@@ -108,13 +121,30 @@ export const CommentsSection: React.FC<CommentsSectionProps> = ({
               </Text>
             </View>
             <Text style={styles.commentText}>{comment.content}</Text>
-            <TouchableOpacity
-              style={styles.likeButton}
-              onPress={() => handleLikeComment(comment.id)}
-            >
-              <Ionicons name="heart-outline" size={16} color={Colors.primary} />
-              <Text style={styles.likeCount}>{comment.likes || 0}</Text>
-            </TouchableOpacity>
+            <View style={styles.reactionsRow}>
+              <TouchableOpacity
+                style={styles.likeButton}
+                onPress={() => handleLikeComment(comment.id)}
+              >
+                <Ionicons
+                  name={comment.liked_by_user ? 'heart' : 'heart-outline'}
+                  size={16}
+                  color={Colors.primary}
+                />
+                <Text style={styles.likeCount}>{comment.likes || 0}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.likeButton}
+                onPress={() => handleDislikeComment(comment.id)}
+              >
+                <Ionicons
+                  name={comment.disliked_by_user ? 'thumbs-down' : 'thumbs-down-outline'}
+                  size={16}
+                  color={Colors.textMuted}
+                />
+                <Text style={styles.dislikeCount}>{comment.dislikes || 0}</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       ))}
@@ -219,6 +249,11 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     marginBottom: 8,
   },
+  reactionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
   likeButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -226,6 +261,10 @@ const styles = StyleSheet.create({
   },
   likeCount: {
     color: Colors.primary,
+    fontSize: 12,
+  },
+  dislikeCount: {
+    color: Colors.textMuted,
     fontSize: 12,
   },
   showMoreButton: {

@@ -83,3 +83,35 @@ async def test_free_episode_accessible_without_auth(client, admin_headers):
     response = await client.get(f"/api/episodes/{episode['id']}")
     assert response.status_code == 200
     assert response.json()["pages"] == ["page1_base64", "page2_base64"]
+
+
+async def test_webtoon_views_increment_on_each_fetch(client, admin_headers):
+    """Regression test: GET /webtoons/{id} never incremented `views`, so
+    every webtoon's view count stayed stuck at its initial value forever,
+    making the admin panel's "vues" column look permanently broken."""
+    webtoon = await create_webtoon(client, admin_headers)
+    assert webtoon["views"] == 0
+
+    first = await client.get(f"/api/webtoons/{webtoon['id']}")
+    assert first.status_code == 200
+    assert first.json()["views"] == 1
+
+    second = await client.get(f"/api/webtoons/{webtoon['id']}")
+    assert second.status_code == 200
+    assert second.json()["views"] == 2
+
+
+async def test_webtoon_views_deduped_per_logged_in_user(client, admin_headers, user_headers):
+    """Regression test: a logged-in user re-opening the same webtoon used
+    to inflate `views` on every single request."""
+    webtoon = await create_webtoon(client, admin_headers)
+
+    first = await client.get(f"/api/webtoons/{webtoon['id']}", headers=user_headers)
+    assert first.json()["views"] == 1
+
+    second = await client.get(f"/api/webtoons/{webtoon['id']}", headers=user_headers)
+    assert second.json()["views"] == 1  # same user, same webtoon - no change
+
+    # A different (anonymous) viewer still counts.
+    third = await client.get(f"/api/webtoons/{webtoon['id']}")
+    assert third.json()["views"] == 2

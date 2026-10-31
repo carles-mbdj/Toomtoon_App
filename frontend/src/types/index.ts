@@ -65,7 +65,9 @@ export interface Comment {
   username: string;
   content: string;
   likes: number;
+  dislikes: number;
   liked_by_user: boolean;
+  disliked_by_user: boolean;
   created_at: string | null;
 }
 

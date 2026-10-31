@@ -15,6 +15,7 @@ import { EpisodeForm } from './pages/EpisodeForm';
 import { Users } from './pages/Users';
 import { Articles } from './pages/Articles';
 import { ArticleForm } from './pages/ArticleForm';
+import { Comments } from './pages/Comments';
 import { Genres } from './pages/Genres';
 import { Subscriptions } from './pages/Subscriptions';
 import { Payments } from './pages/Payments';
@@ -64,6 +65,7 @@ function AppRoutes() {
         <Route path="articles" element={<Articles />} />
         <Route path="articles/new" element={<ArticleForm />} />
         <Route path="articles/:id" element={<ArticleForm />} />
+        <Route path="comments" element={<Comments />} />
         <Route path="settings" element={<Settings />} />
       </Route>
     </Routes>

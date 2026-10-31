@@ -1,5 +1,5 @@
 import React from 'react';
-import { BookOpen, Users, Eye, Newspaper, Crown, TrendingUp, Calendar, Star } from 'lucide-react';
+import { BookOpen, Users, Eye, Newspaper, Crown, TrendingUp, Calendar, Star, MessageSquare } from 'lucide-react';
 import { useDashboardStats } from '../hooks/queries';
 
 export const Dashboard: React.FC = () => {
@@ -10,6 +10,7 @@ export const Dashboard: React.FC = () => {
     totalUsers: data?.total_users || 0,
     premiumUsers: data?.premium_users || 0,
     totalArticles: data?.total_articles || 0,
+    totalComments: data?.total_comments || 0,
     totalViews: data?.total_views || 0,
     featuredWebtoons: data?.featured_webtoons || 0,
     completedWebtoons: data?.completed_webtoons || 0,
@@ -24,6 +25,7 @@ export const Dashboard: React.FC = () => {
     { label: 'Premium', value: stats.premiumUsers, icon: Crown, color: 'bg-yellow-500', subtext: `${Math.round((stats.premiumUsers / stats.totalUsers) * 100) || 0}% du total` },
     { label: 'Articles', value: stats.totalArticles, icon: Newspaper, color: 'bg-purple-500', subtext: 'Toom-Mag' },
     { label: 'Vues totales', value: stats.totalViews.toLocaleString(), icon: Eye, color: 'bg-pink-500', subtext: 'Toutes plateformes' },
+    { label: 'Commentaires', value: stats.totalComments, icon: MessageSquare, color: 'bg-cyan-500', subtext: 'Tous contenus' },
     { label: 'En exclusivité', value: stats.featuredWebtoons, icon: Star, color: 'bg-orange-500', subtext: 'Page d\'accueil' },
   ];
 

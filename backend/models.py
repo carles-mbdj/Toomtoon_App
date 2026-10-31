@@ -309,6 +309,7 @@ class Comment(BaseModel):
     article_id: Optional[str] = None
     content: str
     likes: List[str] = []  # List of user IDs who liked
+    dislikes: List[str] = []  # List of user IDs who disliked
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 class CommentCreate(BaseModel):

@@ -115,6 +115,19 @@ export interface SubscriptionPlanInput {
   active?: boolean;
 }
 
+export interface AdminComment {
+  id: string;
+  user_id: string;
+  username: string;
+  user_email?: string | null;
+  content: string;
+  likes: number;
+  dislikes: number;
+  context_type: 'webtoon' | 'episode' | 'article' | null;
+  context_title?: string | null;
+  created_at: string | null;
+}
+
 export interface Payment {
   id: string;
   user_email: string;
@@ -132,6 +145,7 @@ export interface DashboardStats {
   total_webtoons: number;
   total_episodes: number;
   total_articles: number;
+  total_comments: number;
   active_subscriptions: number;
   premium_users: number;
   featured_webtoons: number;

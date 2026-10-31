@@ -8,6 +8,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 
 import config
+import view_tracking
 from auth_utils import get_current_user, require_admin
 from models import (
     CoverImageUpdate,
@@ -65,10 +66,17 @@ async def get_featured_webtoons():
     return [Webtoon(**w) for w in featured]
 
 @router.get("/webtoons/{webtoon_id}", response_model=Webtoon)
-async def get_webtoon(webtoon_id: str):
+async def get_webtoon(webtoon_id: str, current_user: User = Depends(get_current_user)):
     webtoon = await config.db.webtoons.find_one({"id": webtoon_id})
     if not webtoon:
         raise HTTPException(status_code=404, detail="Webtoon non trouvé")
+
+    # Counts once per logged-in user (re-opening the same webtoon doesn't
+    # keep inflating it); anonymous views still increment every time since
+    # there's no stable identity to dedupe against.
+    await view_tracking.record_view("webtoon", webtoon_id, current_user.id if current_user else None)
+    webtoon = await config.db.webtoons.find_one({"id": webtoon_id})
+
     return Webtoon(**webtoon)
 
 # Note: creating/updating webtoons is only exposed via the authenticated
@@ -145,8 +153,9 @@ async def get_episode(
         if not current_user.subscription_type or (current_user.subscription_end and current_user.subscription_end < datetime.utcnow()):
             raise HTTPException(status_code=403, detail="Abonnement requis pour cet épisode")
 
-    # Increment views
-    await config.db.episodes.update_one({"id": episode_id}, {"$inc": {"views": 1}})
+    # Counts once per logged-in user; anonymous views still increment
+    # every time (see view_tracking.record_view).
+    await view_tracking.record_view("episode", episode_id, current_user.id if current_user else None)
 
     return ep
 

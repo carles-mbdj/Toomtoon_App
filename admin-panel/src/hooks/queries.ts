@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
   articlesApi,
+  commentsApi,
   episodesApi,
   genresApi,
   statsApi,
@@ -257,5 +258,22 @@ export function useRefundPayment() {
     mutationFn: ({ paymentIntentId, amount }: { paymentIntentId: string; amount?: number }) =>
       subscriptionsApi.refundPayment(paymentIntentId, amount),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'payments'] }),
+  });
+}
+
+// ==================== COMMENTS (MODERATION) ====================
+
+export function useAdminComments(params: { skip: number; limit: number }) {
+  return useQuery({
+    queryKey: ['admin', 'comments', params],
+    queryFn: () => commentsApi.getAll(params).then((res) => res.data),
+  });
+}
+
+export function useDeleteComment() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => commentsApi.delete(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'comments'] }),
   });
 }

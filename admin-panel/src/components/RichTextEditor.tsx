@@ -3,16 +3,22 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Image from '@tiptap/extension-image';
 import Link from '@tiptap/extension-link';
-import { 
-  Bold, 
-  Italic, 
-  List, 
-  ListOrdered, 
-  Heading1, 
+import { Table } from '@tiptap/extension-table';
+import TableRow from '@tiptap/extension-table-row';
+import TableHeader from '@tiptap/extension-table-header';
+import TableCell from '@tiptap/extension-table-cell';
+import {
+  Bold,
+  Italic,
+  List,
+  ListOrdered,
+  Heading1,
   Heading2,
   Quote,
   Link as LinkIcon,
   Image as ImageIcon,
+  Table as TableIcon,
+  Trash2,
   Undo,
   Redo
 } from 'lucide-react';
@@ -22,15 +28,43 @@ interface RichTextEditorProps {
   onChange: (value: string) => void;
 }
 
-export const RichTextEditor: React.FC<RichTextEditorProps> = ({ 
-  value, 
+// Adds a `width` attribute (rendered as inline style) to the stock Image
+// extension, so an inserted image can be resized via the toolbar instead
+// of always filling its container at its native size.
+const ResizableImage = Image.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      width: {
+        default: '100%',
+        renderHTML: (attributes: { width?: string }) => ({
+          style: `width: ${attributes.width || '100%'}; height: auto;`,
+        }),
+      },
+    };
+  },
+});
+
+const IMAGE_WIDTHS = [
+  { label: '25%', value: '25%' },
+  { label: '50%', value: '50%' },
+  { label: '75%', value: '75%' },
+  { label: '100%', value: '100%' },
+];
+
+export const RichTextEditor: React.FC<RichTextEditorProps> = ({
+  value,
   onChange
 }) => {
   const editor = useEditor({
     extensions: [
       StarterKit,
-      Image.configure({ inline: true }),
+      ResizableImage.configure({ inline: true }),
       Link.configure({ openOnClick: false }),
+      Table.configure({ resizable: true }),
+      TableRow,
+      TableHeader,
+      TableCell,
     ],
     content: value,
     onUpdate: ({ editor }) => {
@@ -52,6 +86,14 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
     if (url) {
       editor.chain().focus().setImage({ src: url }).run();
     }
+  };
+
+  const addTable = () => {
+    editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
+  };
+
+  const setImageWidth = (width: string) => {
+    editor.chain().focus().updateAttributes('image', { width }).run();
   };
 
   const addLink = () => {
@@ -154,9 +196,20 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
         <ToolbarButton onClick={addImage} title="Ajouter une image">
           <ImageIcon size={18} />
         </ToolbarButton>
-        
+        <ToolbarButton onClick={addTable} isActive={editor.isActive('table')} title="Insérer un tableau">
+          <TableIcon size={18} />
+        </ToolbarButton>
+        {editor.isActive('table') && (
+          <ToolbarButton
+            onClick={() => editor.chain().focus().deleteTable().run()}
+            title="Supprimer le tableau"
+          >
+            <Trash2 size={18} />
+          </ToolbarButton>
+        )}
+
         <div className="flex-1" />
-        
+
         <ToolbarButton onClick={() => editor.chain().focus().undo().run()} title="Annuler">
           <Undo size={18} />
         </ToolbarButton>
@@ -164,6 +217,23 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
           <Redo size={18} />
         </ToolbarButton>
       </div>
+
+      {/* Image size controls - only shown while an image is selected */}
+      {editor.isActive('image') && (
+        <div className="bg-[var(--surface-light)] px-3 py-2 flex items-center gap-2 border-b border-[var(--border)]">
+          <span className="text-xs text-[var(--text-muted)]">Taille de l'image :</span>
+          {IMAGE_WIDTHS.map((w) => (
+            <button
+              key={w.value}
+              type="button"
+              onClick={() => setImageWidth(w.value)}
+              className="px-2 py-1 text-xs font-medium rounded-md hover:bg-[var(--border)] text-[var(--text-secondary)] transition-colors"
+            >
+              {w.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Editor */}
       <div className="rich-text-editor-content">
@@ -220,6 +290,26 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
           height: auto;
           border-radius: 0.5rem;
           margin: 1rem 0;
+        }
+        .rich-text-editor-content .ProseMirror img.ProseMirror-selectednode {
+          outline: 2px solid var(--primary);
+        }
+        .rich-text-editor-content .ProseMirror table {
+          border-collapse: collapse;
+          table-layout: fixed;
+          width: 100%;
+          margin: 1rem 0;
+        }
+        .rich-text-editor-content .ProseMirror th,
+        .rich-text-editor-content .ProseMirror td {
+          border: 1px solid var(--border);
+          padding: 0.5rem;
+          vertical-align: top;
+        }
+        .rich-text-editor-content .ProseMirror th {
+          background: var(--surface);
+          font-weight: bold;
+          text-align: left;
         }
         .rich-text-editor-content .ProseMirror strong {
           font-weight: bold;

@@ -85,6 +85,7 @@ async def get_admin_stats(admin: User = Depends(require_admin)):
     total_webtoons = await config.db.webtoons.count_documents({})
     total_episodes = await config.db.episodes.count_documents({})
     total_articles = await config.db.articles.count_documents({})
+    total_comments = await config.db.comments.count_documents({})
     active_subscriptions = await config.db.subscriptions.count_documents({"status": "active"})
     premium_users = await config.db.users.count_documents({"subscription_type": {"$nin": [None, "free"]}})
     featured_webtoons = await config.db.webtoons.count_documents({"is_featured": True})
@@ -149,6 +150,7 @@ async def get_admin_stats(admin: User = Depends(require_admin)):
         "total_webtoons": total_webtoons,
         "total_episodes": total_episodes,
         "total_articles": total_articles,
+        "total_comments": total_comments,
         "active_subscriptions": active_subscriptions,
         "premium_users": premium_users,
         "featured_webtoons": featured_webtoons,

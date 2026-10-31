@@ -15,6 +15,7 @@ import { Colors } from '../../src/constants/colors';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LoadingSpinner } from '../../src/components/LoadingSpinner';
 import { CommentsSection } from '../../src/components/comments/CommentsSection';
+import { HtmlContent } from '../../src/components/HtmlContent';
 import { useArticle } from '../../src/hooks/queries';
 
 export default function ArticleScreen() {
@@ -95,7 +96,7 @@ export default function ArticleScreen() {
           </View>
 
           {/* Content */}
-          <Text style={styles.articleContent}>{article.content}</Text>
+          <HtmlContent html={article.content} />
         </View>
 
         <CommentsSection articleId={articleId} />
@@ -122,7 +123,6 @@ const styles = StyleSheet.create({
   author: { color: Colors.textMuted, fontSize: 14 },
   viewsContainer: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   views: { color: Colors.textMuted, fontSize: 14 },
-  articleContent: { color: Colors.text, fontSize: 16, lineHeight: 26 },
   errorState: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   errorText: { color: Colors.textMuted, fontSize: 16, marginTop: 16 },
 });

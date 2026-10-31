@@ -1,5 +1,6 @@
 import api from './config';
 import type {
+  AdminComment,
   AdminUser,
   Article,
   ArticleInput,
@@ -29,6 +30,11 @@ interface PaymentFilters {
   skip?: number;
   limit?: number;
   status?: string;
+}
+
+interface CommentFilters {
+  skip?: number;
+  limit?: number;
 }
 
 // Auth
@@ -100,6 +106,12 @@ export const subscriptionsApi = {
   getPayments: (params?: PaymentFilters) => api.get<{ total: number; payments: Payment[] }>('/admin/payments', { params }),
   refundPayment: (paymentIntentId: string, amount?: number) =>
     api.post(`/payments/${paymentIntentId}/refund`, { amount }),
+};
+
+// Comments (moderation)
+export const commentsApi = {
+  getAll: (params?: CommentFilters) => api.get<{ total: number; comments: AdminComment[] }>('/admin/comments', { params }),
+  delete: (id: string) => api.delete(`/comments/${id}`),
 };
 
 // Stats

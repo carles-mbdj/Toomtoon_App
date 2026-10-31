@@ -5,6 +5,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 
 import config
+import view_tracking
 from auth_utils import get_current_user, require_admin
 from models import Article, ArticleCreate, Comment, CommentCreate, ReadingHistory, User
 
@@ -80,7 +81,8 @@ async def clear_reading_history(current_user: User = Depends(get_current_user)):
 async def get_comments(
     webtoon_id: Optional[str] = None,
     episode_id: Optional[str] = None,
-    article_id: Optional[str] = None
+    article_id: Optional[str] = None,
+    current_user: User = Depends(get_current_user)
 ):
     """Get comments for a webtoon, episode, or article"""
     query = {}
@@ -96,13 +98,17 @@ async def get_comments(
     result = []
     for c in comments:
         user = await config.db.users.find_one({"id": c["user_id"]})
+        likes = c.get("likes", [])
+        dislikes = c.get("dislikes", [])
         result.append({
             "id": c.get("id"),
             "user_id": c.get("user_id"),
             "username": user.get("username") if user else "Utilisateur",
             "content": c.get("content"),
-            "likes": len(c.get("likes", [])),
-            "liked_by_user": False,  # Will be updated by client
+            "likes": len(likes),
+            "dislikes": len(dislikes),
+            "liked_by_user": bool(current_user and current_user.id in likes),
+            "disliked_by_user": bool(current_user and current_user.id in dislikes),
             "created_at": c.get("created_at").isoformat() if c.get("created_at") else None
         })
 
@@ -133,6 +139,7 @@ async def create_comment(
         "username": current_user.username,
         "content": comment.content,
         "likes": 0,
+        "dislikes": 0,
         "created_at": comment.created_at.isoformat()
     }
 
@@ -141,7 +148,9 @@ async def toggle_like_comment(
     comment_id: str,
     current_user: User = Depends(get_current_user)
 ):
-    """Toggle like on a comment"""
+    """Toggle like on a comment. Liking removes any existing dislike from
+    the same user - a comment can't be both liked and disliked by one
+    person at once."""
     if not current_user:
         raise HTTPException(status_code=401, detail="Connectez-vous pour aimer")
 
@@ -150,17 +159,50 @@ async def toggle_like_comment(
         raise HTTPException(status_code=404, detail="Commentaire non trouvé")
 
     likes = comment.get("likes", [])
+    dislikes = comment.get("dislikes", [])
 
     if current_user.id in likes:
         likes.remove(current_user.id)
         action = "unliked"
     else:
         likes.append(current_user.id)
+        if current_user.id in dislikes:
+            dislikes.remove(current_user.id)
         action = "liked"
 
-    await config.db.comments.update_one({"id": comment_id}, {"$set": {"likes": likes}})
+    await config.db.comments.update_one({"id": comment_id}, {"$set": {"likes": likes, "dislikes": dislikes}})
 
-    return {"success": True, "action": action, "likes": len(likes)}
+    return {"success": True, "action": action, "likes": len(likes), "dislikes": len(dislikes)}
+
+@router.post("/comments/{comment_id}/dislike")
+async def toggle_dislike_comment(
+    comment_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Toggle dislike on a comment. Disliking removes any existing like
+    from the same user, symmetrically with toggle_like_comment."""
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Connectez-vous pour réagir")
+
+    comment = await config.db.comments.find_one({"id": comment_id})
+    if not comment:
+        raise HTTPException(status_code=404, detail="Commentaire non trouvé")
+
+    likes = comment.get("likes", [])
+    dislikes = comment.get("dislikes", [])
+
+    if current_user.id in dislikes:
+        dislikes.remove(current_user.id)
+        action = "undisliked"
+    else:
+        dislikes.append(current_user.id)
+        if current_user.id in likes:
+            likes.remove(current_user.id)
+        action = "disliked"
+
+    await config.db.comments.update_one({"id": comment_id}, {"$set": {"likes": likes, "dislikes": dislikes}})
+
+    return {"success": True, "action": action, "likes": len(likes), "dislikes": len(dislikes)}
 
 @router.delete("/comments/{comment_id}")
 async def delete_comment(
@@ -180,6 +222,52 @@ async def delete_comment(
 
     await config.db.comments.delete_one({"id": comment_id})
     return {"success": True}
+
+
+@router.get("/admin/comments")
+async def admin_get_comments(
+    skip: int = 0,
+    limit: int = 20,
+    admin: User = Depends(require_admin)
+):
+    """Get all comments across the platform (admin only), newest first,
+    enriched with the title of the webtoon/episode/article they're on."""
+    total = await config.db.comments.count_documents({})
+    comments = await config.db.comments.find().sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
+
+    result = []
+    for c in comments:
+        user = await config.db.users.find_one({"id": c.get("user_id")})
+
+        context_type = None
+        context_title = None
+        if c.get("webtoon_id"):
+            webtoon = await config.db.webtoons.find_one({"id": c["webtoon_id"]})
+            context_type = "webtoon"
+            context_title = webtoon.get("title") if webtoon else None
+        elif c.get("episode_id"):
+            episode = await config.db.episodes.find_one({"id": c["episode_id"]})
+            context_type = "episode"
+            context_title = episode.get("title") if episode else None
+        elif c.get("article_id"):
+            article = await config.db.articles.find_one({"id": c["article_id"]})
+            context_type = "article"
+            context_title = article.get("title") if article else None
+
+        result.append({
+            "id": c.get("id"),
+            "user_id": c.get("user_id"),
+            "username": user.get("username") if user else "Utilisateur supprimé",
+            "user_email": user.get("email") if user else None,
+            "content": c.get("content"),
+            "likes": len(c.get("likes", [])),
+            "dislikes": len(c.get("dislikes", [])),
+            "context_type": context_type,
+            "context_title": context_title,
+            "created_at": c.get("created_at").isoformat() if c.get("created_at") else None,
+        })
+
+    return {"total": total, "comments": result}
 
 
 # ==================== TOOM-MAG (ARTICLES) ====================
@@ -212,14 +300,17 @@ async def get_articles(
     } for a in articles]
 
 @router.get("/articles/{article_id}")
-async def get_article(article_id: str):
+async def get_article(article_id: str, current_user: User = Depends(get_current_user)):
     """Get a single article"""
     article = await config.db.articles.find_one({"id": article_id})
     if not article:
         raise HTTPException(status_code=404, detail="Article non trouvé")
 
-    # Increment views
-    await config.db.articles.update_one({"id": article_id}, {"$inc": {"views": 1}})
+    # Counts once per logged-in user (re-reading the same article doesn't
+    # keep inflating it); anonymous views still increment every time since
+    # there's no stable identity to dedupe against.
+    await view_tracking.record_view("article", article_id, current_user.id if current_user else None)
+    article = await config.db.articles.find_one({"id": article_id})
 
     return {
         "id": article.get("id"),
@@ -230,7 +321,7 @@ async def get_article(article_id: str):
         "category": article.get("category"),
         "author": article.get("author"),
         "featured": article.get("featured", False),
-        "views": article.get("views", 0) + 1,
+        "views": article.get("views", 0),
         "created_at": article.get("created_at").isoformat() if article.get("created_at") else None
     }
 

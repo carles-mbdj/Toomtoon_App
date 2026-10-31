@@ -128,6 +128,16 @@ export function useLikeComment(params: { webtoon_id?: string; episode_id?: strin
   });
 }
 
+export function useDislikeComment(params: { webtoon_id?: string; episode_id?: string; article_id?: string }) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (commentId: string) => commentsApi.dislike(commentId).then((res) => res.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['comments', params] });
+    },
+  });
+}
+
 // ==================== SUBSCRIPTION PLANS ====================
 
 interface LegacyPlanEntry {

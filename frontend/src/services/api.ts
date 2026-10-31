@@ -236,10 +236,11 @@ export const historyApi = {
   clear: () => api.delete('/history'),
 };
 
-interface LikeCommentResponse {
+interface ReactToCommentResponse {
   success: boolean;
-  action: 'liked' | 'unliked';
+  action: 'liked' | 'unliked' | 'disliked' | 'undisliked';
   likes: number;
+  dislikes: number;
 }
 
 // Comments API
@@ -248,7 +249,8 @@ export const commentsApi = {
     api.get<Comment[]>('/comments', { params }),
   create: (data: { webtoon_id?: string; episode_id?: string; article_id?: string; content: string }) =>
     api.post<Comment>('/comments', data),
-  like: (commentId: string) => api.post<LikeCommentResponse>(`/comments/${commentId}/like`),
+  like: (commentId: string) => api.post<ReactToCommentResponse>(`/comments/${commentId}/like`),
+  dislike: (commentId: string) => api.post<ReactToCommentResponse>(`/comments/${commentId}/dislike`),
   delete: (commentId: string) => api.delete(`/comments/${commentId}`),
 };
 
